@@ -4,6 +4,10 @@
 #include <iostream>
 #include <math.h>
 
+#define RGB_STRENGTH 0.5
+#define UNBLUR_ITER 5
+#define REFINE_ITER 3
+
 inline uchar get_pixel(uchar* in, int width, int height, int channels, int row, int col, int channel) {
   return in[row * width * channels + col * channels + channel];
 }
@@ -64,13 +68,13 @@ void luminance(uchar* in, int width, int height, int channels, uchar* out) {
     for (int j = 0; j < width; j++) {
       for (int c = 0; c < channels; c++) {
         if (channels == 3) {
-          // int sample = 2 * in[i * width *  channels + j * channels];
+          // int sample = in[i * width *  channels + j * channels];
           // sample += 3 * in[i * width *  channels + j * channels + 1];
-          // sample += in[i * width *  channels + j * channels] + 2;
+          // sample += 2* in[i * width *  channels + j * channels] + 2;
 
-          float sample = 0.3 * in[i * width * channels + j * channels];
+          float sample = 0.11 * in[i * width * channels + j * channels];
           sample += 0.58 * in[i * width * channels + j * channels + 1];
-          sample += 0.11 * in[i * width * channels + j * channels + 2];
+          sample += 0.3 * in[i * width * channels + j * channels + 2];
 
           out[i * width + j] = sample;
         } else {
@@ -93,7 +97,7 @@ float clamp(float val, float min_val, float max_val) {
   return max(min(val, max_val), min_val);
 }
 
-void sobel(uchar* in, int width, int height, float* out) {
+void sobel(uchar* in, int width, int height, uchar* out) {
   float kx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
   float ky[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
@@ -109,7 +113,7 @@ void sobel(uchar* in, int width, int height, float* out) {
         }
       }
 
-      out[i * width + j] = 1.0f - clamp(sqrt(mag_x * mag_x + mag_y * mag_y) / 255.0, 0, 1);
+      out[i * width + j] = 255.0 - clamp(sqrt(mag_x * mag_x + mag_y * mag_y), 0, 255.0);
     }
   }
 
@@ -133,28 +137,41 @@ void sobel(uchar* in, int width, int height, float* out) {
   out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
 }
 
-void push_lum() {}
+void gaussian(uchar* in, int width, int height, uchar* out) {
+  float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
 
-#define RGB_STRENGTH 0.4
+  for (int i = 1; i < height - 1; i++) {
+    for (int j = 1; j < width - 1; j++) {
+      float res = 0;
 
-int argmin(float* grad, int a, int b) {
-  return grad[a] > grad[b] ? b : a;
-}
+      for (int ki = 0; ki < 3; ki++) {
+        for (int kj = 0; kj < 3; kj++) {
+          res += g[ki][kj] * in[(i + ki - 1) * width + j + kj - 1];
+        }
+      }
 
-int argmax(float* grad, int a, int b) {
-  return grad[a] < grad[b] ? b : a;
-}
+      out[i * width + j] = res;
+    }
+  }
 
-int argmin3(float* grad, int a, int b, int c) {
-  return argmin(grad, argmin(grad, a, b), c);
-}
+  // expand the image by 1px
+  // not sure, we could change this
 
-int argmax3(float* grad, int a, int b, int c) {
-  return argmax(grad, argmax(grad, a, b), c);
-}
+  for (int i = 1; i < width - 1; i ++) {
+    out[i] = out[width + i];
+    out[(height - 1) * width + i] = out[(height - 2) * width + i];
+  }
 
-uchar blend(uchar base, uchar a, uchar b, uchar c) {
-  return (1.0 - RGB_STRENGTH) * base + RGB_STRENGTH * (a + b + c) / 3.0;
+  for (int i = 1; i < height - 1; i ++) {
+    out[i * width] = out[i * width + 1];
+    out[(i + 1) * width - 1] = out[(i + 1) * width - 2];
+  }
+
+  out[0] = (out[1] + out[width]) / 2;
+  out[width - 1] = (out[width - 2] + out[2 * width - 1]) / 2;
+
+  out[(height - 1) * width] = (out[(height - 2) * width] + out[(height - 1) * width + 1]) / 2;
+  out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
 }
 
 void copyc(uchar* in, int channels, uchar* out, int v) {
@@ -163,13 +180,131 @@ void copyc(uchar* in, int channels, uchar* out, int v) {
   }
 }
 
+void gaussian3(uchar* in, int width, int height, uchar* out) {
+  float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
+
+  for (int i = 1; i < height - 1; i++) {
+    for (int j = 1; j < width - 1; j++) {
+      for (int c = 0; c < 3; c++) {
+        float res = 0;
+
+        for (int ki = 0; ki < 3; ki++) {
+          for (int kj = 0; kj < 3; kj++) {
+            res += g[ki][kj] * in[(i + ki - 1) * width * 3 + (j + kj - 1) * 3 + c];
+          }
+        }
+
+        out[i * width * 3 + j * 3 + c] = res;
+      }
+    }
+  }
+
+  // expand the image by 1px
+  // not sure, we could change this
+
+  for (int i = 1; i < width - 1; i ++) {
+    out[i] = out[width + i];
+    out[(height - 1) * width + i] = out[(height - 2) * width + i];
+  }
+
+  for (int i = 1; i < height - 1; i ++) {
+    out[i * width] = out[i * width + 1];
+    out[(i + 1) * width - 1] = out[(i + 1) * width - 2];
+  }
+
+  out[0] = (out[1] + out[width]) / 2;
+  out[width - 1] = (out[width - 2] + out[2 * width - 1]) / 2;
+
+  out[(height - 1) * width] = (out[(height - 2) * width] + out[(height - 1) * width + 1]) / 2;
+  out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
+}
+
+void median(uchar* in, int width, int height, uchar* out) {
+  for (int i = 1; i < height - 1; i++) {
+    for (int j = 1; j < width - 1; j++) {
+      uchar vals[9];
+      uchar* cur = vals;
+
+      for (int ki = -1; ki < 2; ki++) {
+        for (int kj = -1; kj < 2; kj++) {
+          *cur = in[(i + ki) * width + j + kj];
+          cur++;
+        }
+      }
+
+      int len = 9;
+      int swap = 1;
+      int tmp, new_len;
+      while (swap) {
+        swap = 0;
+
+        for (int i = 1; i < len; i++) {
+          if (vals[i - 1] > vals[i]) {
+            swap = 1;
+            tmp = vals[i];
+            vals[i] = vals[i - 1];
+            vals[i - 1] = tmp;
+            new_len = i;
+          }
+        }
+
+        len = new_len;
+      }
+
+      // for (int i = 0; i < 9; i++) printf("%d ", vals[i]);
+      // printf("\n");
+
+      out[i * width + j] = vals[5];
+    }
+  }
+
+  // expand the image by 1px
+  // not sure, we could change this
+
+  for (int i = 1; i < width - 1; i ++) {
+    out[i] = out[width + i];
+    out[(height - 1) * width + i] = out[(height - 2) * width + i];
+  }
+
+  for (int i = 1; i < height - 1; i ++) {
+    out[i * width] = out[i * width + 1];
+    out[(i + 1) * width - 1] = out[(i + 1) * width - 2];
+  }
+
+  out[0] = (out[1] + out[width]) / 2;
+  out[width - 1] = (out[width - 2] + out[2 * width - 1]) / 2;
+
+  out[(height - 1) * width] = (out[(height - 2) * width] + out[(height - 1) * width + 1]) / 2;
+  out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
+}
+
+int argmin(uchar* grad, int a, int b) {
+  return grad[a] > grad[b] ? b : a;
+}
+
+int argmax(uchar* grad, int a, int b) {
+  return grad[a] < grad[b] ? b : a;
+}
+
+int argmin3(uchar* grad, int a, int b, int c) {
+  return argmin(grad, argmin(grad, a, b), c);
+}
+
+int argmax3(uchar* grad, int a, int b, int c) {
+  return argmax(grad, argmax(grad, a, b), c);
+}
+
+uchar blend(uchar base, uchar a, uchar b, uchar c) {
+  return (1.0 - RGB_STRENGTH) * base + RGB_STRENGTH * (a + b + c) / 3.0;
+}
+
 void blendc(uchar* in, int channels, uchar* out, int base, int a, int b, int c) {
   for (int i = 0; i < channels; i++) {
     out[base * channels + i] = blend(in[base * channels + i], in[a * channels + i], in[b * channels + i], in[c * channels + i]);
   }
 }
 
-void push_rgb(uchar* data, float* grad, uchar* out, int width, int height, int channels) {
+void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int channels) {
   for (int i = 1; i < height - 1; i++) {
     for (int j = 1; j < width - 1; j++) {
       int c = i * width + j;
@@ -192,7 +327,7 @@ void push_rgb(uchar* data, float* grad, uchar* out, int width, int height, int c
       min = argmin3(grad, tl, t, tr);
       max = argmax3(grad, bl, b, br);
 
-      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+      if (grad[min] > grad[max]) {
         blendc(data, channels, out, c, tl, t, tr);
         continue;
       }
@@ -201,7 +336,7 @@ void push_rgb(uchar* data, float* grad, uchar* out, int width, int height, int c
       min = argmin3(grad, bl, b, br);
       max = argmax3(grad, tl, t, tr);
 
-      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+      if (grad[min] > grad[max]) {
         blendc(data, channels, out, c, bl, b, br);
         continue;
       }
@@ -210,7 +345,7 @@ void push_rgb(uchar* data, float* grad, uchar* out, int width, int height, int c
       min = argmin3(grad, tl, l, bl);
       max = argmax3(grad, tr, r, br);
 
-      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+      if (grad[min] > grad[max]) {
         blendc(data, channels, out, c, tl, l, bl);
         continue;
       }
@@ -219,7 +354,7 @@ void push_rgb(uchar* data, float* grad, uchar* out, int width, int height, int c
       min = argmin3(grad, tr, r, br);
       max = argmax3(grad, tl, l, bl);
 
-      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+      if (grad[min] > grad[max]) {
         blendc(data, channels, out, c, tr, r, br);
         continue;
       }
@@ -275,6 +410,135 @@ void push_rgb(uchar* data, float* grad, uchar* out, int width, int height, int c
   }
 }
 
+uchar min(uchar a, uchar b) {
+  return a > b ? b : a;
+}
+
+uchar max(uchar a, uchar b) {
+  return a < b ? b : a;
+}
+
+uchar min3(uchar a, uchar b, uchar c) {
+  return min(min(a, b), c);
+}
+
+uchar max3(uchar a, uchar b, uchar c) {
+  return max(max(a, b), c);
+}
+
+uchar blend_lightest(uchar lightest, uchar base, uchar a, uchar b, uchar c) {
+  return max(lightest, blend(base, a, b, c));
+}
+
+void push_grad(uchar* in, int width, int height, uchar* out) {
+  for (int i = 1; i < height - 1; i++) {
+    for (int j = 1; j < width - 1; j++) {
+      int c = in[i * width + j];
+
+      int tl = in[(i - 1) * width + (j - 1)];
+      int tr = in[(i + 1) * width + (j - 1)];
+
+      int bl = in[(i - 1) * width + (j + 1)];
+      int br = in[(i + 1) * width + (j + 1)];
+      
+      int t = in[i * width + (j - 1)];
+      int b = in[i * width + (j + 1)];
+
+      int l = in[(i - 1) * width + j];
+      int r = in[(i + 1) * width + j];
+
+      int min, max;
+
+      // vertical push top -> bottom
+      min = min3(tl, t, tr);
+      max = max3(bl, b, br);
+
+      uchar res = c;
+
+      if (min > max) {
+        res = blend_lightest(res, c, tl, t, tr);
+      }
+
+      // vertical push bottom -> top
+      min = min3(bl, b, br);
+      max = max3(tl, t, tr);
+
+      if (min > max) {
+        res = blend_lightest(res, c, bl, b, br);
+      }
+
+      // horizontal push left -> right
+      min = min3(tl, l, bl);
+      max = max3(tr, r, br);
+
+      if (min > max) {
+        res = blend_lightest(res, c, tl, l, bl);
+      }
+
+      // horizontal push right -> left
+      min = min3(tr, r, br);
+      max = max3(tl, l, bl);
+
+      if (min > max) {
+        res = blend_lightest(res, c, tr, r, br);
+      }
+
+      // diagonal push top right -> bottom left
+      min = min3(t, c, r);
+      max = max3(l, bl, b);
+
+      if (min > res && res > max) {
+        res = blend_lightest(res, c, t, tr, r);
+      }
+
+      // diagonal push bottom left -> top right
+      min = min3(b, c, l);
+      max = max3(r, tr, t);
+
+      if (min > res && res > max) {
+        res = blend_lightest(res, c, b, bl, l);
+      }
+
+      // diagonal push top left -> bottom right
+      min = min3(t, c, l);
+      max = max3(r, br, b);
+
+      if (min > res && res > max) {
+        res = blend_lightest(res, c, t, tl, l);
+      }
+
+      // diagonal push bottom right -> top left
+      min = min3(b, c, r);
+      max = max3(l, tl, t);
+
+      if (min > res && res > max) {
+        res = blend_lightest(res, c, b, br, r);
+      }
+
+      out[i * width + j] = res;
+    }
+  }
+
+  // expand the image by 1px
+  // not sure, we could change this
+
+  for (int i = 1; i < width - 1; i ++) {
+    out[i] = out[width + i];
+    out[(height - 1) * width + i] = out[(height - 2) * width + i];
+  }
+
+  for (int i = 1; i < height - 1; i ++) {
+    out[i * width] = out[i * width + 1];
+    out[(i + 1) * width - 1] = out[(i + 1) * width - 2];
+  }
+
+  out[0] = (out[1] + out[width]) / 2;
+  out[width - 1] = (out[width - 2] + out[2 * width - 1]) / 2;
+
+  out[(height - 1) * width] = (out[(height - 2) * width] + out[(height - 1) * width + 1]) / 2;
+  out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
+}
+
 void usage(char* program_name) {
   std::cout << "Usage: " << program_name << " scale input_image output_image" << std::endl;
   std::exit(1);
@@ -302,22 +566,58 @@ int main(int argc, char** argv) {
   int new_width = floor(scale * size.width);
   int new_height = floor(scale * size.height);
   int channels = image.channels();
+
+  void* tmp;
+  uchar* tmp1c = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
+  uchar* tmpnc = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
+
   uchar* upscaled = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
+  uchar* blurred = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
   uchar* lum = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
-  float* sob = (float*) malloc(sizeof(float) * new_width * new_height);
+  uchar* med = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
+  uchar* sob = (uchar*) malloc(sizeof(float) * new_width * new_height);
+  uchar* grad = (uchar*) malloc(sizeof(float) * new_width * new_height);
   uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
 
   std::cout << new_width << " " << new_height << std::endl;
 
-  resize(original, size.width, size.height, channels, scale, upscaled);
-  luminance(upscaled, new_width, new_height, channels, lum);
-  sobel(lum, new_width, new_height, sob);
-  push_rgb(upscaled, sob, res, new_width, new_height, channels);
+  resize(original, size.width, size.height, channels, scale, res);
+  // gaussian3(upscaled, new_width, new_height, blurred);
+  luminance(res, new_width, new_height, channels, lum);
+
+  for (int i = 0; i < UNBLUR_ITER; i++) {
+    push_grad(lum, new_width, new_height, tmp1c);
+
+    tmp = lum;
+    lum = tmp1c;
+    tmp1c = (uchar*) tmp;
+  }
+
+  sobel(lum, new_width, new_height, grad);
+
+  for (int i = 0; i < REFINE_ITER; i++) {
+    push_rgb(res, grad, tmpnc, new_width, new_height, channels);
+
+    tmp = res;
+    res = tmpnc;
+    tmpnc = (uchar*) tmp;
+
+    push_grad(grad, new_width, new_height, tmp1c);
+
+    tmp = grad;
+    grad = tmp1c;
+    tmp1c = (uchar*) tmp;
+  }
   
+  // cv::Mat output(new_height, new_width, CV_8U, grad);
   cv::Mat output(new_height, new_width, CV_8UC3, res);
   cv::imwrite(argv[3], output);
 
   free(upscaled);
+  free(lum);
+  free(med);
+  free(sob);
+  free(res);
 
   return 0;
 }
