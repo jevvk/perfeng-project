@@ -304,7 +304,7 @@ void blendc(uchar* in, int channels, uchar* out, int base, int a, int b, int c) 
   }
 }
 
-void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int channels) {
+void push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels) {
   for (int i = 1; i < height - 1; i++) {
     for (int j = 1; j < width - 1; j++) {
       int c = i * width + j;
@@ -329,6 +329,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int c
 
       if (grad[min] > grad[max]) {
         blendc(data, channels, out, c, tl, t, tr);
+        out_grad[c] = blend(grad[c], grad[tl], grad[t], grad[tr]);
         continue;
       }
 
@@ -338,6 +339,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int c
 
       if (grad[min] > grad[max]) {
         blendc(data, channels, out, c, bl, b, br);
+        out_grad[c] = blend(grad[c], grad[bl], grad[b], grad[br]);
         continue;
       }
 
@@ -347,6 +349,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int c
 
       if (grad[min] > grad[max]) {
         blendc(data, channels, out, c, tl, l, bl);
+        out_grad[c] = blend(grad[c], grad[tl], grad[l], grad[bl]);
         continue;
       }
 
@@ -356,6 +359,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int c
 
       if (grad[min] > grad[max]) {
         blendc(data, channels, out, c, tr, r, br);
+        out_grad[c] = blend(grad[c], grad[tr], grad[r], grad[br]);
         continue;
       }
 
@@ -365,6 +369,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int c
 
       if (grad[min] > grad[c] && grad[c] > grad[max]) {
         blendc(data, channels, out, c, t, tr, r);
+        out_grad[c] = blend(grad[c], grad[t], grad[tr], grad[r]);
         continue;
       }
 
@@ -374,6 +379,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int c
 
       if (grad[min] > grad[c] && grad[c] > grad[max]) {
         blendc(data, channels, out, c, b, bl, l);
+        out_grad[c] = blend(grad[c], grad[b], grad[bl], grad[l]);
         continue;
       }
 
@@ -383,6 +389,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int c
 
       if (grad[min] > grad[c] && grad[c] > grad[max]) {
         blendc(data, channels, out, c, t, tl, l);
+        out_grad[c] = blend(grad[c], grad[t], grad[tl], grad[l]);
         continue;
       }
 
@@ -392,6 +399,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int c
 
       if (grad[min] > grad[c] && grad[c] > grad[max]) {
         blendc(data, channels, out, c, b, br, r);
+        out_grad[c] = blend(grad[c], grad[b], grad[br], grad[r]);
         continue;
       }
 
@@ -596,13 +604,13 @@ int main(int argc, char** argv) {
   sobel(lum, new_width, new_height, grad);
 
   for (int i = 0; i < REFINE_ITER; i++) {
-    push_rgb(res, grad, tmpnc, new_width, new_height, channels);
+    push_rgb(res, grad, tmpnc, tmp1c, new_width, new_height, channels);
 
     tmp = res;
     res = tmpnc;
     tmpnc = (uchar*) tmp;
 
-    push_grad(grad, new_width, new_height, tmp1c);
+    // push_grad(grad, new_width, new_height, tmp1c);
 
     tmp = grad;
     grad = tmp1c;
