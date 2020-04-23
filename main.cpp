@@ -203,20 +203,14 @@ void gaussian3(uchar* in, int width, int height, uchar* out) {
   // not sure, we could change this
 
   for (int i = 1; i < width - 1; i ++) {
-    out[i] = out[width + i];
-    out[(height - 1) * width + i] = out[(height - 2) * width + i];
+    copyc(in, 3, out, i);
+    copyc(in, 3, out, (height - 1) * width + i);
   }
 
-  for (int i = 1; i < height - 1; i ++) {
-    out[i * width] = out[i * width + 1];
-    out[(i + 1) * width - 1] = out[(i + 1) * width - 2];
+  for (int i = 0; i < height; i ++) {
+    copyc(in, 3, out, i * width);
+    copyc(in, 3, out, (i + 1) * width - 1);
   }
-
-  out[0] = (out[1] + out[width]) / 2;
-  out[width - 1] = (out[width - 2] + out[2 * width - 1]) / 2;
-
-  out[(height - 1) * width] = (out[(height - 2) * width] + out[(height - 1) * width + 1]) / 2;
-  out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
 }
 
 void median(uchar* in, int width, int height, uchar* out) {
@@ -408,12 +402,12 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, 
     }
   }
 
-  for (int i = 0; i < width - 0; i ++) {
+  for (int i = 1; i < width - 1; i ++) {
     copyc(data, channels, out, i);
     copyc(data, channels, out, (height - 1) * width + i);
   }
 
-  for (int i = 1; i < height - 1; i ++) {
+  for (int i = 0; i < height; i ++) {
     copyc(data, channels, out, i * width);
     copyc(data, channels, out, (i + 1) * width - 1);
   }
@@ -536,16 +530,10 @@ void push_grad(uchar* in, int width, int height, uchar* out) {
     out[(height - 1) * width + i] = out[(height - 2) * width + i];
   }
 
-  for (int i = 1; i < height - 1; i ++) {
+  for (int i = 0; i < height; i ++) {
     out[i * width] = out[i * width + 1];
     out[(i + 1) * width - 1] = out[(i + 1) * width - 2];
   }
-
-  out[0] = (out[1] + out[width]) / 2;
-  out[width - 1] = (out[width - 2] + out[2 * width - 1]) / 2;
-
-  out[(height - 1) * width] = (out[(height - 2) * width] + out[(height - 1) * width + 1]) / 2;
-  out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
 }
 
 void usage(char* program_name) {
@@ -590,9 +578,13 @@ int main(int argc, char** argv) {
 
   std::cout << new_width << " " << new_height << std::endl;
 
+  // gaussian3(original, size.width, size.height, blurred);
+  // resize(blurred, size.width, size.height, channels, scale, res);
+  // luminance(res, new_width, new_height, channels, lum);
   resize(original, size.width, size.height, channels, scale, res);
-  // gaussian3(upscaled, new_width, new_height, blurred);
-  luminance(res, new_width, new_height, channels, lum);
+  gaussian3(res, new_width, new_height, blurred);
+  luminance(blurred, new_width, new_height, channels, lum);
+  // luminance(res, new_width, new_height, channels, lum);
 
   for (int i = 0; i < UNBLUR_ITER; i++) {
     push_grad(lum, new_width, new_height, tmp1c);
