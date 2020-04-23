@@ -77,6 +77,18 @@ void luminance(uchar* in, int width, int height, int channels, uchar* out) {
   }
 }
 
+float min(float a, float b) {
+  return a > b ? b : a;
+}
+
+float max(float a, float b) {
+  return a < b ? b : a;
+}
+
+float clamp(float val, float min_val, float max_val) {
+  return max(min(val, max_val), min_val);
+}
+
 void sobel(uchar* in, int width, int height, uchar* out) {
   float kx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
   float ky[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
@@ -93,7 +105,7 @@ void sobel(uchar* in, int width, int height, uchar* out) {
         }
       }
 
-      out[i * width + j] = sqrt(mag_x * mag_x + mag_y * mag_y);
+      out[i * width + j] = 1.0f - clamp(sqrt(mag_x * mag_x + mag_y * mag_y), 0.0f, 1.0f);
     }
   }
 
@@ -117,8 +129,147 @@ void sobel(uchar* in, int width, int height, uchar* out) {
   out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
 }
 
-void push_rgb() {}
 void push_lum() {}
+
+#define RGB_STRENGTH 0.4
+
+int argmin(uchar* grad, int a, int b) {
+  return grad[a] > grad[b] ? b : a;
+}
+
+int argmax(uchar* grad, int a, int b) {
+  return grad[a] < grad[b] ? b : a;
+}
+
+int argmin3(uchar* grad, int a, int b, int c) {
+  return argmin(grad, argmin(grad, a, b), c);
+}
+
+int argmax3(uchar* grad, int a, int b, int c) {
+  return argmax(grad, argmax(grad, a, b), c);
+}
+
+uchar blend(uchar base, uchar a, uchar b, uchar c) {
+  return (1.0 - RGB_STRENGTH) * base + RGB_STRENGTH * (a + b + c) / 3.0;
+}
+
+void copyc(uchar* in, int channels, uchar* out, int v) {
+  for (int i = 0; i < channels; i++) {
+    out[v * channels + i] = in[v * channels + i];
+  }
+}
+
+void blendc(uchar* in, int channels, uchar* out, int base, int a, int b, int c) {
+  for (int i = 0; i < channels; i++) {
+    out[c * channels + i] = blend(in[base * channels + i], in[a * channels + i], in[b * channels + i], in[c * channels + i]);
+  }
+}
+
+void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int channels) {
+  for (int i = 1; i < height - 1; i++) {
+    for (int j = 1; j < width - 1; j++) {
+      int c = i * width + j;
+
+      int tl = (i - 1) * width + (j - 1);
+      int tr = (i + 1) * width + (j - 1);
+
+      int bl = (i - 1) * width + (j + 1);
+      int br = (i + 1) * width + (j + 1);
+      
+      int t = i * width + (j - 1);
+      int b = i * width + (j + 1);
+
+      int l = (i - 1) * width + j;
+      int r = (i + 1) * width + j;
+
+      int min, max;
+
+      // vertical push top -> bottom
+      min = argmin3(grad, tl, t, tr);
+      max = argmax3(grad, bl, b, br);
+
+      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+        blendc(data, channels, out, c, tl, t, tr);
+        continue;
+      }
+
+      // vertical push bottom -> top
+      min = argmin3(grad, bl, b, br);
+      max = argmax3(grad, tl, t, tr);
+
+      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+        blendc(data, channels, out, c, bl, b, br);
+        continue;
+      }
+
+      // horizontal push left -> right
+      min = argmin3(grad, tl, l, bl);
+      max = argmax3(grad, tr, r, br);
+
+      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+        blendc(data, channels, out, c, tl, l, bl);
+        continue;
+      }
+
+      // horizontal push right -> left
+      min = argmin3(grad, tr, r, br);
+      max = argmax3(grad, tl, l, bl);
+
+      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+        blendc(data, channels, out, c, tr, r, br);
+        continue;
+      }
+
+      // diagonal push top right -> bottom left
+      min = argmin3(grad, t, c, r);
+      max = argmax3(grad, l, bl, b);
+
+      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+        blendc(data, channels, out, c, t, tr, r);
+        continue;
+      }
+
+      // diagonal push bottom left -> top right
+      min = argmin3(grad, b, c, l);
+      max = argmax3(grad, r, tr, t);
+
+      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+        blendc(data, channels, out, c, b, bl, l);
+        continue;
+      }
+
+      // diagonal push top left -> bottom right
+      min = argmin3(grad, t, c, l);
+      max = argmax3(grad, r, br, b);
+
+      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+        blendc(data, channels, out, c, t, tl, l);
+        continue;
+      }
+
+      // diagonal push bottom right -> top left
+      min = argmin3(grad, b, c, r);
+      max = argmax3(grad, l, tl, t);
+
+      if (grad[min] > grad[c] && grad[c] > grad[max]) {
+        blendc(data, channels, out, c, b, br, r);
+        continue;
+      }
+
+      copyc(data, channels, out, c);
+    }
+  }
+
+  for (int i = 0; i < width - 0; i ++) {
+    copyc(data, channels, out, i);
+    copyc(data, channels, out, (height - 1) * width + i);
+  }
+
+  for (int i = 1; i < height - 1; i ++) {
+    copyc(data, channels, out, i * width);
+    copyc(data, channels, out, (i + 1) * width - 1);
+  }
+}
 
 void usage(char* program_name) {
   std::cout << "Usage: " << program_name << " scale input_image output_image" << std::endl;
@@ -146,17 +297,20 @@ int main(int argc, char** argv) {
   uchar* original = image.data;
   int new_width = floor(scale * size.width);
   int new_height = floor(scale * size.height);
-  uchar* upscaled = (uchar*) malloc(sizeof(uchar) * new_width * new_height * image.channels());
+  int channels = image.channels();
+  uchar* upscaled = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
   uchar* lum = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
   uchar* sob = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
+  uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
 
   std::cout << new_width << " " << new_height << std::endl;
 
-  resize(original, size.width, size.height, image.channels(), scale, upscaled);
-  luminance(upscaled, new_width, new_height, image.channels(), lum);
+  resize(original, size.width, size.height, channels, scale, upscaled);
+  luminance(upscaled, new_width, new_height, channels, lum);
   sobel(lum, new_width, new_height, sob);
+  push_rgb(upscaled, sob, res, new_width, new_height, channels);
   
-  cv::Mat output(new_height, new_width, CV_8U, sob);
+  cv::Mat output(new_height, new_width, CV_8UC3, res);
   cv::imwrite(argv[3], output);
 
   free(upscaled);
