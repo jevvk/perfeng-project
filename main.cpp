@@ -89,7 +89,7 @@ float clamp(float val, float min_val, float max_val) {
   return max(min(val, max_val), min_val);
 }
 
-void sobel(uchar* in, int width, int height, uchar* out) {
+void sobel(uchar* in, int width, int height, float* out) {
   float kx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
   float ky[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
@@ -105,7 +105,7 @@ void sobel(uchar* in, int width, int height, uchar* out) {
         }
       }
 
-      out[i * width + j] = 1.0f - clamp(sqrt(mag_x * mag_x + mag_y * mag_y), 0.0f, 1.0f);
+      out[i * width + j] = 1.0f - clamp(sqrt(mag_x * mag_x + mag_y * mag_y) / 255.0, 0, 1);
     }
   }
 
@@ -133,19 +133,19 @@ void push_lum() {}
 
 #define RGB_STRENGTH 0.4
 
-int argmin(uchar* grad, int a, int b) {
+int argmin(float* grad, int a, int b) {
   return grad[a] > grad[b] ? b : a;
 }
 
-int argmax(uchar* grad, int a, int b) {
+int argmax(float* grad, int a, int b) {
   return grad[a] < grad[b] ? b : a;
 }
 
-int argmin3(uchar* grad, int a, int b, int c) {
+int argmin3(float* grad, int a, int b, int c) {
   return argmin(grad, argmin(grad, a, b), c);
 }
 
-int argmax3(uchar* grad, int a, int b, int c) {
+int argmax3(float* grad, int a, int b, int c) {
   return argmax(grad, argmax(grad, a, b), c);
 }
 
@@ -161,11 +161,11 @@ void copyc(uchar* in, int channels, uchar* out, int v) {
 
 void blendc(uchar* in, int channels, uchar* out, int base, int a, int b, int c) {
   for (int i = 0; i < channels; i++) {
-    out[c * channels + i] = blend(in[base * channels + i], in[a * channels + i], in[b * channels + i], in[c * channels + i]);
+    out[base * channels + i] = blend(in[base * channels + i], in[a * channels + i], in[b * channels + i], in[c * channels + i]);
   }
 }
 
-void push_rgb(uchar* data, uchar* grad, uchar* out, int width, int height, int channels) {
+void push_rgb(uchar* data, float* grad, uchar* out, int width, int height, int channels) {
   for (int i = 1; i < height - 1; i++) {
     for (int j = 1; j < width - 1; j++) {
       int c = i * width + j;
@@ -300,7 +300,7 @@ int main(int argc, char** argv) {
   int channels = image.channels();
   uchar* upscaled = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
   uchar* lum = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
-  uchar* sob = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
+  float* sob = (float*) malloc(sizeof(float) * new_width * new_height);
   uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
 
   std::cout << new_width << " " << new_height << std::endl;
