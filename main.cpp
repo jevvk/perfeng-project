@@ -404,6 +404,7 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, 
       }
 
       copyc(data, channels, out, c);
+      out_grad[c] = grad[c];
     }
   }
 
