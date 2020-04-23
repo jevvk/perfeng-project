@@ -64,11 +64,15 @@ void luminance(uchar* in, int width, int height, int channels, uchar* out) {
     for (int j = 0; j < width; j++) {
       for (int c = 0; c < channels; c++) {
         if (channels == 3) {
-          int sample = 2 * in[i * width *  channels + j * channels];
-          sample += 3 * in[i * width *  channels + j * channels + 1];
-          sample += in[i * width *  channels + j * channels] + 2;
+          // int sample = 2 * in[i * width *  channels + j * channels];
+          // sample += 3 * in[i * width *  channels + j * channels + 1];
+          // sample += in[i * width *  channels + j * channels] + 2;
 
-          out[i * width + j] = sample / 6;
+          float sample = 0.3 * in[i * width * channels + j * channels];
+          sample += 0.58 * in[i * width * channels + j * channels + 1];
+          sample += 0.11 * in[i * width * channels + j * channels + 2];
+
+          out[i * width + j] = sample;
         } else {
           out[i * width + j] = in[i * width + j];
         }
