@@ -5,8 +5,8 @@
 #include <math.h>
 
 #define RGB_STRENGTH 0.5
-#define UNBLUR_ITER 5
-#define REFINE_ITER 3
+#define UNBLUR_ITER 3
+#define REFINE_ITER 5
 
 inline uchar get_pixel(uchar* in, int width, int height, int channels, int row, int col, int channel) {
   return in[row * width * channels + col * channels + channel];
@@ -95,6 +95,22 @@ float max(float a, float b) {
 
 float clamp(float val, float min_val, float max_val) {
   return max(min(val, max_val), min_val);
+}
+
+uchar min(uchar a, uchar b) {
+  return a > b ? b : a;
+}
+
+uchar max(uchar a, uchar b) {
+  return a < b ? b : a;
+}
+
+uchar min3(uchar a, uchar b, uchar c) {
+  return min(min(a, b), c);
+}
+
+uchar max3(uchar a, uchar b, uchar c) {
+  return max(max(a, b), c);
 }
 
 void sobel(uchar* in, int width, int height, uchar* out) {
@@ -272,6 +288,180 @@ void median(uchar* in, int width, int height, uchar* out) {
   out[height * width - 1] = (out[height * width - 2] + out[(height - 1) * width - 1]) / 2;
 }
 
+void bgr2hsv(uchar* bgr, float* hsv) {
+  float M = (float) max3(bgr[0], bgr[1], bgr[2]) / 255.0;
+  float m = (float) min3(bgr[0], bgr[1], bgr[2]) / 255.0;
+  float C = M - m;
+
+  hsv[2] = M;
+
+  if (C <= 0.0001f) {
+    hsv[0] = 0;
+    hsv[1] = 0; // technically undefined
+    return;
+  }
+
+  if (M == 0) {
+    hsv[0] = 0;
+    hsv[1] = 0; // technically undefined
+    return;
+  }
+
+  hsv[1] = C / M;
+
+  if (bgr[2] >= M * 255.0) {
+    hsv[0] = ((float) bgr[1] - bgr[0]) / 255.0 / C;
+  } else if (bgr[1] >= M * 255.0) {
+    hsv[0] = 2.0 + ((float) bgr[0] - bgr[2]) / 255.0 / C;
+  } else {
+    hsv[0] = 4.0 + ((float) bgr[2] - bgr[1]) / 255.0 / C;
+  }
+
+  hsv[0] *= 60;
+
+  if (hsv[0] < 0.0) {
+    hsv[0] += 360.0;
+  }
+}
+
+void hsv2bgr(float* hsv, uchar* bgr) {
+  if (hsv[1] <= 0) {
+    bgr[0] = hsv[2] * 255;
+    bgr[1] = hsv[2] * 255;
+    bgr[2] = hsv[2] * 255;
+    return;
+  }
+
+  float hh, p, q, t, ff;
+  long i;
+
+  hh = hsv[0];
+
+  if (hh >= 360.0) {
+    hh = 0.0;
+  }
+
+  hh /= 60.0;
+  i = (long) hh;
+  ff = hh - i;
+  p = hsv[2] * (1.0 - hsv[1]);
+  q = hsv[2] * (1.0 - (hsv[1] * ff));
+  t = hsv[2] * (1.0 - (hsv[1] * (1.0 - ff)));
+
+  switch(i) {
+  case 0:
+    bgr[2] = hsv[2] * 255;
+    bgr[1] = t * 255;
+    bgr[0] = p * 255;
+    return;
+
+  case 1:
+    bgr[2] = q * 255;
+    bgr[1] = hsv[2] * 255;
+    bgr[0] = p * 255;
+    return;
+
+  case 2:
+    bgr[2] = p * 255;
+    bgr[1] = hsv[2] * 255;
+    bgr[0] = t * 255;
+    return;
+
+  case 3:
+    bgr[2] = p * 255;
+    bgr[1] = q * 255;
+    bgr[0] = hsv[2] * 255;
+    return;
+
+  case 4:
+    bgr[2] = t * 255;
+    bgr[1] = p * 255;
+    bgr[0] = hsv[2] * 255;
+    return;
+
+  case 5:
+  default:
+    bgr[2] = hsv[2] * 255;
+    bgr[1] = p * 255;
+    bgr[0] = q * 255;
+    return;
+  }
+}
+
+void median3(uchar* in, int width, int height, uchar* out) {
+  for (int i = 1; i < height - 1; i++) {
+    for (int j = 1; j < width - 1; j++) {
+      uchar bgr[9][3];
+      float hsv[9][3];
+      uchar med_bgr[3];
+      float med_hsv[3];
+      
+      for (int ki = -1, k = 0; ki < 2; ki++) {
+        for (int kj = -1; kj < 2; kj++) {
+          bgr[k][0] = in[(i + ki) * width * 3 + (j + kj) * 3];
+          bgr[k][1] = in[(i + ki) * width * 3 + (j + kj) * 3 + 1];
+          bgr[k][2] = in[(i + ki) * width * 3 + (j + kj) * 3 + 2];
+
+          k++;
+        }
+      }
+
+      for (int k = 0; k < 9; k++) {
+        bgr2hsv(bgr[k], hsv[k]);
+      }
+
+      for (int c = 0; c < 3; c++) {
+        float vals[9];
+
+        for (int k = 0; k < 9; k++) {
+          vals[k] = hsv[k][c];
+        }
+
+        int len = 9;
+        int swap = 1;
+        int new_len;
+        float tmp;
+        while (swap) {
+          swap = 0;
+
+          for (int i = 1; i < len; i++) {
+            if (vals[i - 1] > vals[i]) {
+              swap = 1;
+              tmp = vals[i];
+              vals[i] = vals[i - 1];
+              vals[i - 1] = tmp;
+              new_len = i;
+            }
+          }
+
+          len = new_len;
+        }
+
+        med_hsv[c] = vals[5];
+      }
+
+      hsv2bgr(med_hsv, med_bgr);
+
+      out[i * width * 3 + j * 3] = med_bgr[0];
+      out[i * width * 3 + j * 3 + 1] = med_bgr[1];
+      out[i * width * 3 + j * 3 + 2] = med_bgr[2];
+    }
+  }
+
+  // expand the image by 1px
+  // not sure, we could change this
+
+  for (int i = 1; i < width - 1; i ++) {
+    copyc(in, 3, out, i);
+    copyc(in, 3, out, (height - 1) * width + i);
+  }
+
+  for (int i = 0; i < height; i ++) {
+    copyc(in, 3, out, i * width);
+    copyc(in, 3, out, (i + 1) * width - 1);
+  }
+}
+
 int argmin(uchar* grad, int a, int b) {
   return grad[a] > grad[b] ? b : a;
 }
@@ -411,22 +601,6 @@ void push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, 
     copyc(data, channels, out, i * width);
     copyc(data, channels, out, (i + 1) * width - 1);
   }
-}
-
-uchar min(uchar a, uchar b) {
-  return a > b ? b : a;
-}
-
-uchar max(uchar a, uchar b) {
-  return a < b ? b : a;
-}
-
-uchar min3(uchar a, uchar b, uchar c) {
-  return min(min(a, b), c);
-}
-
-uchar max3(uchar a, uchar b, uchar c) {
-  return max(max(a, b), c);
 }
 
 uchar blend_lightest(uchar lightest, uchar base, uchar a, uchar b, uchar c) {
@@ -578,11 +752,14 @@ int main(int argc, char** argv) {
 
   std::cout << new_width << " " << new_height << std::endl;
 
-  // gaussian3(original, size.width, size.height, blurred);
+  // median3(original, size.width, size.height, blurred);
   // resize(blurred, size.width, size.height, channels, scale, res);
   // luminance(res, new_width, new_height, channels, lum);
   resize(original, size.width, size.height, channels, scale, res);
-  gaussian3(res, new_width, new_height, blurred);
+  median3(res, new_width, new_height, blurred);
+  // repeatedly applying median filter seems to shift the colors
+  // median3(blurred, new_width, new_height, res);
+  // median3(res, new_width, new_height, blurred);
   luminance(blurred, new_width, new_height, channels, lum);
   // luminance(res, new_width, new_height, channels, lum);
 
