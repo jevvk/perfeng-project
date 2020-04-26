@@ -4,6 +4,7 @@
 // #include <iostream>
 #include <math.h>
 #include <stdlib.h>
+#include <sys/time.h>
 #include <stdio.h>
 
 #define LOADBMP_IMPLEMENTATION
@@ -722,6 +723,11 @@ void usage(char* program_name) {
   exit(1);
 }
 
+double get_time(timeval start, timeval end) {
+  return (double) (end.tv_usec - start.tv_usec) / 1000000 +
+         (double) (end.tv_sec - start.tv_sec);
+}
+
 int main(int argc, char** argv) {
   if (argc != 4) {
     usage(argv[0]);
@@ -737,7 +743,6 @@ int main(int argc, char** argv) {
   unsigned int width, height;
 
   unsigned int err = loadbmp_decode_file(argv[2], &original, &width, &height, LOADBMP_RGB);
-
   if (err) {
     printf("Could not open or find the image\n");
     return 1;
@@ -759,19 +764,21 @@ int main(int argc, char** argv) {
   uchar* grad = (uchar*) malloc(sizeof(float) * new_width * new_height);
   uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
 
-  printf("%d %d\n", new_width, new_height);
+  printf("Creating image of %dx%d\n", new_width, new_height);
 
-  // median3(original, size.width, size.height, blurred);
-  // resize(blurred, size.width, size.height, channels, scale, res);
-  // luminance(res, new_width, new_height, channels, lum);
+  struct timeval tv_res, tv_med, tv_lum, tv_blur, tv_sobel, tv_refine, tv_end;
+  
+  gettimeofday(&tv_res, NULL);
   resize(original, width, height, channels, scale, res);
-  median3(res, new_width, new_height, blurred);
-  // repeatedly applying median filter seems to shift the colors
-  // median3(blurred, new_width, new_height, res);
-  // median3(res, new_width, new_height, blurred);
-  luminance(blurred, new_width, new_height, channels, lum);
-  // luminance(res, new_width, new_height, channels, lum);
 
+  gettimeofday(&tv_med, NULL);
+  // median3(res, new_width, new_height, blurred);
+  gaussian3(res, new_width, new_height, blurred);
+  
+  gettimeofday(&tv_lum, NULL);
+  luminance(blurred, new_width, new_height, channels, lum);
+
+  gettimeofday(&tv_blur , NULL);
   for (int i = 0; i < UNBLUR_ITER; i++) {
     push_grad(lum, new_width, new_height, tmp1c);
 
@@ -780,8 +787,10 @@ int main(int argc, char** argv) {
     tmp1c = (uchar*) tmp;
   }
 
+  gettimeofday(&tv_sobel, NULL);
   sobel(lum, new_width, new_height, grad);
 
+  gettimeofday(&tv_refine, NULL);
   for (int i = 0; i < REFINE_ITER; i++) {
     push_rgb(res, grad, tmpnc, tmp1c, new_width, new_height, channels);
 
@@ -796,6 +805,7 @@ int main(int argc, char** argv) {
     tmp1c = (uchar*) tmp;
   }
   
+  gettimeofday(&tv_end, NULL);
 
   err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
   if (err) {
@@ -807,6 +817,14 @@ int main(int argc, char** argv) {
   free(med);
   free(sob);
   free(res);
+
+  printf("Total compute time: %.5f\n", get_time(tv_res, tv_end));
+  printf("  Resizing:   %.5f\n", get_time(tv_res, tv_med));
+  printf("  Blurring:   %.5f\n", get_time(tv_med, tv_lum));
+  printf("  Luminance:  %.5f\n", get_time(tv_lum, tv_blur));
+  printf("  Unblurring: %.5f\n", get_time(tv_blur, tv_sobel));
+  printf("  Sobel:      %.5f\n", get_time(tv_sobel, tv_refine));
+  printf("  Refining:   %.5f\n", get_time(tv_refine, tv_end));
 
   return 0;
 }
