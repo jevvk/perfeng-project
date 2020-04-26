@@ -1,12 +1,19 @@
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <iostream>
+// #include <opencv2/core/core.hpp>
+// #include <opencv2/highgui/highgui.hpp>
+// #include <opencv2/imgproc/imgproc.hpp>
+// #include <iostream>
 #include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#define LOADBMP_IMPLEMENTATION
+#include "bmp.h"
 
 #define RGB_STRENGTH 0.5
 #define UNBLUR_ITER 3
 #define REFINE_ITER 5
+
+#define uchar unsigned char
 
 inline uchar get_pixel(uchar* in, int width, int height, int channels, int row, int col, int channel) {
   return in[row * width * channels + col * channels + channel];
@@ -22,7 +29,7 @@ void resize(uchar* in, int width, int height, int channels, float scale, uchar* 
         float sample_row = (float) i * height / new_height;
         float sample_col = (float) j * width / new_width;
 
-        int sample_tl_row = floor(sample_row);
+        int sample_tl_row = floor((double) sample_row);
         int sample_tl_col = floor(sample_col);
 
         int sample_bl_row = sample_tl_row + 1;
@@ -60,8 +67,8 @@ void resize(uchar* in, int width, int height, int channels, float scale, uchar* 
 
 void luminance(uchar* in, int width, int height, int channels, uchar* out) {
   if (channels != 3 && channels != 1) {
-    std::cout << "Unknown image format. It has " << channels << "channels." << std::endl;
-    return std::exit(1);
+    printf("Unknown image format. It has %d channels.\n", channels);
+    return exit(1);
   }
 
   for (int i = 0; i < height; i++) {
@@ -85,16 +92,16 @@ void luminance(uchar* in, int width, int height, int channels, uchar* out) {
   }
 }
 
-float min(float a, float b) {
-  return a > b ? b : a;
-}
+// float fmin(float a, float b) {
+//   return a > b ? b : a;
+// }
 
-float max(float a, float b) {
-  return a < b ? b : a;
-}
+// float fmax(float a, float b) {
+//   return a < b ? b : a;
+// }
 
 float clamp(float val, float min_val, float max_val) {
-  return max(min(val, max_val), min_val);
+  return fmax(fmin(val, max_val), min_val);
 }
 
 uchar min(uchar a, uchar b) {
@@ -711,8 +718,8 @@ void push_grad(uchar* in, int width, int height, uchar* out) {
 }
 
 void usage(char* program_name) {
-  std::cout << "Usage: " << program_name << " scale input_image output_image" << std::endl;
-  std::exit(1);
+  printf("Usage: %s scale input_image output_image\n", program_name);
+  exit(1);
 }
 
 int main(int argc, char** argv) {
@@ -722,21 +729,23 @@ int main(int argc, char** argv) {
 
   float scale = atof(argv[1]);
   if (scale <= 1.0) {
-    std::cout << "Size should be more than 1.0" << std::endl;
+    printf("Size should be more than 1.0\n");
     return 1;
   }
 
-  cv::Mat image = cv::imread(argv[2], cv::IMREAD_COLOR);
-  if (!image.data) {
-    std::cout <<  "Could not open or find the image" << std::endl ;
+  uchar *original;
+  unsigned int width, height;
+
+  unsigned int err = loadbmp_decode_file(argv[2], &original, &width, &height, LOADBMP_RGB);
+
+  if (err) {
+    printf("Could not open or find the image\n");
     return 1;
   }
 
-  cv::Size size = image.size();
-  uchar* original = image.data;
-  int new_width = floor(scale * size.width);
-  int new_height = floor(scale * size.height);
-  int channels = image.channels();
+  int new_width = floor(scale * width);
+  int new_height = floor(scale * height);
+  int channels = 3; // BMP always has 3 channels (r, g, b)
 
   void* tmp;
   uchar* tmp1c = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
@@ -750,12 +759,12 @@ int main(int argc, char** argv) {
   uchar* grad = (uchar*) malloc(sizeof(float) * new_width * new_height);
   uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
 
-  std::cout << new_width << " " << new_height << std::endl;
+  printf("%d %d\n", new_width, new_height);
 
   // median3(original, size.width, size.height, blurred);
   // resize(blurred, size.width, size.height, channels, scale, res);
   // luminance(res, new_width, new_height, channels, lum);
-  resize(original, size.width, size.height, channels, scale, res);
+  resize(original, width, height, channels, scale, res);
   median3(res, new_width, new_height, blurred);
   // repeatedly applying median filter seems to shift the colors
   // median3(blurred, new_width, new_height, res);
@@ -787,9 +796,11 @@ int main(int argc, char** argv) {
     tmp1c = (uchar*) tmp;
   }
   
-  // cv::Mat output(new_height, new_width, CV_8U, grad);
-  cv::Mat output(new_height, new_width, CV_8UC3, res);
-  cv::imwrite(argv[3], output);
+
+  err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
+  if (err) {
+    printf("Error during saving file to %s\n", argv[3]);
+  }
 
   free(upscaled);
   free(lum);
