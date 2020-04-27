@@ -1,8 +1,22 @@
 # INCLUDES=-I/usr/include/opencv4
-# LIBRARIES=-lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_imgproc
+LIBRARIES=-L/usr/local/cuda-10.2/lib64 -lcuda -lcudart
 
-comic-upscaler: main.cpp
-	g++ $(INCLUDES) $(LIBRARIES) $^ -o $@
+SRC=$(wildcard *.c)
+SRC_CUDA=$(wildcard *.cu)
+
+OBJ=$(patsubst %.cpp,%.o,$(SRC))
+OBJ_CUDA=$(patsubst %.cu,%.o,$(SRC_CUDA))
+
+CC=gcc
+NVCC=nvcc
+
+NVCCFLAGS=-arch=sm_61
+
+comic-upscaler: main.cpp $(OBJ_CUDA)
+	$(NVCC) $(INCLUDES) $(LIBRARIES) $^ -o $@
+
+%.o: %.cu
+	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:
 	rm comic-upscaler

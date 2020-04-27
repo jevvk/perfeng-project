@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <stdio.h>
+#include "kernels.h"
 
 #define LOADBMP_IMPLEMENTATION
 #include "bmp.h"
@@ -788,7 +789,21 @@ int main(int argc, char** argv) {
   }
 
   gettimeofday(&tv_sobel, NULL);
-  sobel(lum, new_width, new_height, grad);
+
+  unsigned char* remote_lum;
+  unsigned char* remote_grad;
+
+  create_device_image(remote_lum, new_width * new_height * sizeof(uchar));
+  create_device_image(remote_grad, new_width * new_height * sizeof(float));
+
+  copy_to_device(remote_lum, lum, new_width * new_height * sizeof(uchar));
+
+  printf("Starting kernel..\n");
+  sobel_kernel(remote_lum, new_width, new_height, remote_grad);
+
+  copy_from_device(grad, remote_grad, new_width * new_height * sizeof(float));
+
+  // sobel(lum, new_width, new_height, grad);
 
   gettimeofday(&tv_refine, NULL);
   for (int i = 0; i < REFINE_ITER; i++) {
