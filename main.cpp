@@ -792,34 +792,46 @@ int main(int argc, char** argv) {
 
   uchar* remote_lum;
   uchar* remote_grad;
+  uchar* remote_res;
+  uchar* remote_tmpnc;
+  uchar* remote_tmp1c;
 
-  create_device_image((void**) &remote_lum, new_width * new_height * sizeof(uchar));
-  create_device_image((void**) &remote_grad, new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &remote_lum,    new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &remote_grad,   new_width * new_height * sizeof(uchar));
+
+  create_device_image((void**) &remote_tmp1c,  new_width * new_height * sizeof(uchar));
+  
+  create_device_image((void**) &remote_res,    new_width * new_height * channels * sizeof(uchar));
+  create_device_image((void**) &remote_tmpnc,  new_width * new_height * channels * sizeof(uchar));
 
   copy_to_device(remote_lum, lum, new_width * new_height * sizeof(uchar));
+  copy_to_device(remote_res, res, new_width * new_height * channels * sizeof(uchar));
 
-  printf("Starting kernel..\n");
   sobel_kernel(remote_lum, new_width, new_height, remote_grad);
 
-  copy_from_device(grad, remote_grad, new_width * new_height * sizeof(uchar));
 
   // sobel(lum, new_width, new_height, grad);
 
   gettimeofday(&tv_refine, NULL);
   for (int i = 0; i < REFINE_ITER; i++) {
-    push_rgb(res, grad, tmpnc, tmp1c, new_width, new_height, channels);
+    push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels);
 
-    tmp = res;
-    res = tmpnc;
-    tmpnc = (uchar*) tmp;
+    // push_rgb(res, grad, tmpnc, tmp1c, new_width, new_height, channels);
+
+    tmp = remote_res;
+    remote_res = remote_tmpnc;
+    remote_tmpnc = (uchar*) tmp;
 
     // push_grad(grad, new_width, new_height, tmp1c);
 
-    tmp = grad;
-    grad = tmp1c;
-    tmp1c = (uchar*) tmp;
+    tmp = remote_grad;
+    remote_grad = remote_tmp1c;
+    remote_tmp1c = (uchar*) tmp;
   }
   
+  copy_from_device(res, remote_res, new_width * new_height * channels * sizeof(uchar));
+
+
   gettimeofday(&tv_end, NULL);
 
   err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
