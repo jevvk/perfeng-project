@@ -761,8 +761,8 @@ int main(int argc, char** argv) {
   uchar* blurred = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
   uchar* lum = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
   uchar* med = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
-  uchar* sob = (uchar*) malloc(sizeof(float) * new_width * new_height);
-  uchar* grad = (uchar*) malloc(sizeof(float) * new_width * new_height);
+  uchar* sob = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
+  uchar* grad = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
   uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
 
   printf("Creating image of %dx%d\n", new_width, new_height);
@@ -790,18 +790,18 @@ int main(int argc, char** argv) {
 
   gettimeofday(&tv_sobel, NULL);
 
-  unsigned char* remote_lum;
-  unsigned char* remote_grad;
+  uchar* remote_lum;
+  uchar* remote_grad;
 
-  create_device_image(remote_lum, new_width * new_height * sizeof(uchar));
-  create_device_image(remote_grad, new_width * new_height * sizeof(float));
+  create_device_image((void**) &remote_lum, new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &remote_grad, new_width * new_height * sizeof(uchar));
 
   copy_to_device(remote_lum, lum, new_width * new_height * sizeof(uchar));
 
   printf("Starting kernel..\n");
   sobel_kernel(remote_lum, new_width, new_height, remote_grad);
 
-  copy_from_device(grad, remote_grad, new_width * new_height * sizeof(float));
+  copy_from_device(grad, remote_grad, new_width * new_height * sizeof(uchar));
 
   // sobel(lum, new_width, new_height, grad);
 

@@ -7,10 +7,10 @@ extern "C" {
 }
 #endif 
 
-void create_device_image(unsigned char* ptr, int size);
+void create_device_image(void** ptr, int size);
 
-void copy_to_device(unsigned char* host, unsigned char* device, int size);
-void copy_from_device(unsigned char* device, unsigned char* host, int size);
+void copy_to_device(void* host, void* device, int size);
+void copy_from_device(void* device, void* host, int size);
 
 void sobel_kernel(unsigned char* in, int width, int height, unsigned char* out);
 
