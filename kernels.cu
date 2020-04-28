@@ -68,11 +68,58 @@ __global__ void cu_luminance(uchar* in, int width, int height, int channels, uch
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
+    if (i < 0 || i >= height || j < 0 || j >= width) return;
 
     out[i * width + j] = 0.11 * in[i * width * channels + j * channels]
                        + 0.58 * in[i * width * channels + j * channels + 1]
                        +  0.3 * in[i * width * channels + j * channels + 2];
+}
+
+__global__ void cu_resize(uchar* in, int width, int height, int channels, float scale, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    int new_width = floor(scale * width);
+    int new_height = floor(scale * height);
+    
+    if (i < 0 || i >= new_height || j < 0 || j >= new_width) return;
+  
+    for (int c = 0; c < channels; c++) {
+        float sample_row = (float) i * height / new_height;
+        float sample_col = (float) j * width / new_width;
+
+        int sample_tl_row = floor((double) sample_row);
+        int sample_tl_col = floor(sample_col);
+
+        int sample_bl_row = sample_tl_row + 1;
+        int sample_bl_col = sample_tl_col;
+
+        int sample_tr_row = sample_tl_row;
+        int sample_tr_col = sample_tl_col + 1;
+
+        int sample_br_row = sample_tl_row + 1;
+        int sample_br_col = sample_tl_col + 1;
+
+        float weight_row = 1.0f - sample_row + sample_tl_row;
+        float weight_col = 1.0f - sample_col + sample_tl_col;
+
+        float sample1 = weight_row * in[sample_tl_row * width * channels + sample_tl_col * channels + c];
+        if (sample_bl_row < height) {
+            sample1 += (1.0f - weight_row) * in[sample_bl_row * width * channels + sample_bl_col * channels + c];
+        }
+
+        if (sample_tr_col < width) {
+            float sample2 = weight_row * in[sample_tr_row * width * channels + sample_tr_col * channels + c];
+
+            if (sample_br_row < height) {
+                sample2 += (1.0f - weight_row) * in[sample_br_row * width * channels + sample_br_col * channels + c];
+            }
+
+            sample1 = sample1 * weight_col + (1.0f - weight_col) * sample2;
+        }
+
+        out[i * new_width * channels + j * channels + c] = sample1;
+    }
 }
 
 __global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
@@ -353,6 +400,19 @@ void copy_to_device(void* device, void* host, int size) {
 
 void copy_from_device(void* host, void* device, int size) {
     checkCudaCall(cudaMemcpy(host, device, size, cudaMemcpyDeviceToHost));
+}
+
+void resize_kernel(uchar* in, int width, int height, int channels, float scale, uchar* out) {
+    int new_width = floor(scale * width);
+    int new_height = floor(scale * height);
+
+    // Split input into 16x16 (256 threads per grid)
+    dim3 grid(new_width / threadBlockWidth + 1, new_height / threadBlockHeight + 1);
+    dim3 block(threadBlockWidth, threadBlockHeight);
+
+    cu_resize<<<grid, block>>>(in, width, height, channels, scale, out);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
 }
 
 void gaussian3_kernel(uchar* in, int width, int height, uchar* out) {

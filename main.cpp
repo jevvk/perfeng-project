@@ -775,7 +775,9 @@ int main(int argc, char** argv) {
   uchar* remote_tmpnc;
   uchar* remote_tmp1c;
   uchar* remote_blurred;
+  uchar* remote_original;
 
+  create_device_image((void**) &remote_original,  new_width * new_height * channels * sizeof(uchar));
   create_device_image((void**) &remote_blurred,  new_width * new_height * channels * sizeof(uchar));
 
   create_device_image((void**) &remote_lum,    new_width * new_height * sizeof(uchar));
@@ -786,24 +788,20 @@ int main(int argc, char** argv) {
   create_device_image((void**) &remote_res,    new_width * new_height * channels * sizeof(uchar));
   create_device_image((void**) &remote_tmpnc,  new_width * new_height * channels * sizeof(uchar));
 
+  copy_to_device(remote_original, original, width * height * channels * sizeof(uchar));
 
   printf("Creating image of %dx%d\n", new_width, new_height);
 
   struct timeval tv_res, tv_med, tv_lum, tv_blur, tv_sobel, tv_refine, tv_end;
   
   gettimeofday(&tv_res, NULL);
-  resize(original, width, height, channels, scale, res);
+  resize_kernel(remote_original, width, height, channels, scale, remote_res);
 
   gettimeofday(&tv_med, NULL);
-  // median3(res, new_width, new_height, blurred);
-
-  copy_to_device(remote_res, res, new_width * new_height * channels * sizeof(uchar));
-
   gaussian3_kernel(remote_res, new_width, new_height, remote_blurred);
 
   gettimeofday(&tv_lum, NULL);
   luminance_kernel(remote_blurred, new_width, new_height, channels, remote_lum);
-  
 
   gettimeofday(&tv_blur , NULL);
   for (int i = 0; i < UNBLUR_ITER; i++) {
@@ -834,10 +832,9 @@ int main(int argc, char** argv) {
     remote_tmp1c = (uchar*) tmp;
   }
   
-  copy_from_device(res, remote_res, new_width * new_height * channels * sizeof(uchar));
-
-
   gettimeofday(&tv_end, NULL);
+  
+  copy_from_device(res, remote_res, new_width * new_height * channels * sizeof(uchar));
 
   err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
   if (err) {
