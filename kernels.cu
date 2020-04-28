@@ -37,6 +37,14 @@ __device__ int cu_argmax3(uchar* grad, int a, int b, int c) {
     return cu_argmax(grad, cu_argmax(grad, a, b), c);
 }
 
+__device__ uchar cu_min3(uchar a, uchar b, uchar c) {
+    return min(min(a, b), c);
+}
+  
+__device__ uchar cu_max3(uchar a, uchar b, uchar c) {
+    return max(max(a, b), c);
+}
+
 __device__ float cu_clamp(float val, float min_val, float max_val) {
     return max(min(val, max_val), min_val);
 }
@@ -45,9 +53,47 @@ __device__ uchar cu_blend(uchar base, uchar a, uchar b, uchar c) {
     return (1.0 - RGB_STRENGTH) * base + RGB_STRENGTH * (a + b + c) / 3.0;
 }
   
+__device__ uchar cu_blend_lightest(uchar lightest, uchar base, uchar a, uchar b, uchar c) {
+    return max(lightest, cu_blend(base, a, b, c));
+  }
+  
+
 __device__ void cu_blendc(uchar* in, int channels, uchar* out, int base, int a, int b, int c) {
     for (int i = 0; i < channels; i++) {
         out[base * channels + i] = cu_blend(in[base * channels + i], in[a * channels + i], in[b * channels + i], in[c * channels + i]);
+    }
+}
+
+__global__ void cu_luminance(uchar* in, int width, int height, int channels, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
+
+    out[i * width + j] = 0.11 * in[i * width * channels + j * channels]
+                       + 0.58 * in[i * width * channels + j * channels + 1]
+                       +  0.3 * in[i * width * channels + j * channels + 2];
+}
+
+__global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
+    
+    float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
+
+    #pragma unroll
+    for (int c = 0; c < 3; c++) {
+        float res = 0;
+
+        for (int ki = 0; ki < 3; ki++) {
+            for (int kj = 0; kj < 3; kj++) {
+                res += g[ki][kj] * in[(i + ki - 1) * width * 3 + (j + kj - 1) * 3 + c];
+            }
+        }
+
+        out[i * width * 3 + j * 3 + c] = res;
     }
 }
 
@@ -180,22 +226,119 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     out_grad[c] = grad[c];
 }
 
-__global__ void copy_horizontal(uchar* img, int width, int height) {
+__global__ void cu_push_grad(uchar* in, int width, int height, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
+
+    int c = in[i * width + j];
+
+    int tl = in[(i - 1) * width + (j - 1)];
+    int tr = in[(i + 1) * width + (j - 1)];
+
+    int bl = in[(i - 1) * width + (j + 1)];
+    int br = in[(i + 1) * width + (j + 1)];
+    
+    int t = in[i * width + (j - 1)];
+    int b = in[i * width + (j + 1)];
+
+    int l = in[(i - 1) * width + j];
+    int r = in[(i + 1) * width + j];
+
+    int min, max;
+
+    // vertical push top -> bottom
+    min = cu_min3(tl, t, tr);
+    max = cu_max3(bl, b, br);
+
+    uchar res = c;
+
+    if (min > max) {
+        res = cu_blend_lightest(res, c, tl, t, tr);
+    }
+
+    // vertical push bottom -> top
+    min = cu_min3(bl, b, br);
+    max = cu_max3(tl, t, tr);
+
+    if (min > max) {
+        res = cu_blend_lightest(res, c, bl, b, br);
+    }
+
+    // horizontal push left -> right
+    min = cu_min3(tl, l, bl);
+    max = cu_max3(tr, r, br);
+
+    if (min > max) {
+        res = cu_blend_lightest(res, c, tl, l, bl);
+    }
+
+    // horizontal push right -> left
+    min = cu_min3(tr, r, br);
+    max = cu_max3(tl, l, bl);
+
+    if (min > max) {
+        res = cu_blend_lightest(res, c, tr, r, br);
+    }
+
+    // diagonal push top right -> bottom left
+    min = cu_min3(t, c, r);
+    max = cu_max3(l, bl, b);
+
+    if (min > res && res > max) {
+        res = cu_blend_lightest(res, c, t, tr, r);
+    }
+
+    // diagonal push bottom left -> top right
+    min = cu_min3(b, c, l);
+    max = cu_max3(r, tr, t);
+
+    if (min > res && res > max) {
+        res = cu_blend_lightest(res, c, b, bl, l);
+    }
+
+    // diagonal push top left -> bottom right
+    min = cu_min3(t, c, l);
+    max = cu_max3(r, br, b);
+
+    if (min > res && res > max) {
+        res = cu_blend_lightest(res, c, t, tl, l);
+    }
+
+    // diagonal push bottom right -> top left
+    min = cu_min3(b, c, r);
+    max = cu_max3(l, tl, t);
+
+    if (min > res && res > max) {
+        res = cu_blend_lightest(res, c, b, br, r);
+    }
+
+    out[i * width + j] = res;
+}
+
+__global__ void copy_horizontal(uchar* img, int width, int height, int channels) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (i == 0 || i >= width - 1) return;
 
-    img[(height - 1) * width + i] = img[(height - 2) * width + i];
-    img[i]                        = img[width + i];
+    #pragma unroll
+    for (int n = 0; n < channels; n++) {
+        img[((height - 1) * width + i) * channels + n] = img[((height - 2) * width + i) * channels + n];
+        img[i * channels + n] = img[(width + i) * channels + n];
+    }
 }
 
-__global__ void copy_vertical(uchar* img, int width, int height) {
+__global__ void copy_vertical(uchar* img, int width, int height, int channels) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (i > height - 1) return;
 
-    img[i * width] = img[i * width + 1];
-    img[i * width + (width - 2)] = img[i * width + (width - 1)];
+    #pragma unroll
+    for (int n = 0; n < channels; n++) {
+        img[i * width * channels + n] = img[(i * width + 1) * channels + n];
+        img[(i * width + (width - 2)) * channels + n] = img[(i * width + (width - 1)) * channels + n];
+    }
 }
 
 
@@ -212,6 +355,53 @@ void copy_from_device(void* host, void* device, int size) {
     checkCudaCall(cudaMemcpy(host, device, size, cudaMemcpyDeviceToHost));
 }
 
+void gaussian3_kernel(uchar* in, int width, int height, uchar* out) {
+    // Split input into 16x16 (256 threads per grid)
+    dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
+    dim3 block(threadBlockWidth, threadBlockHeight);
+
+    cu_gaussian3<<<grid, block>>>(in, width, height, out);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+
+    copy_horizontal<<<width - 2, 1>>>(out, width, height, 1);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+
+    copy_vertical<<<height, 1>>>(out, width, height, 1);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+}
+
+void luminance_kernel(uchar* in, int width, int height, int channels, uchar* out) {
+    // Split input into 16x16 (256 threads per grid)
+    dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
+    dim3 block(threadBlockWidth, threadBlockHeight);
+
+    cu_luminance<<<grid, block>>>(in, width, height, channels, out);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+}
+
+void push_grad_kernel(uchar* in, int width, int height, uchar* out) {
+    // Split input into 16x16 (256 threads per grid)
+    dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
+    dim3 block(threadBlockWidth, threadBlockHeight);
+
+    cu_push_grad<<<grid, block>>>(in, width, height, out);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+
+
+    copy_horizontal<<<width - 2, 1>>>(out, width, height, 1);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+
+    copy_vertical<<<height, 1>>>(out, width, height, 1);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+}
+
 
 void sobel_kernel(uchar* in, int width, int height, uchar* out) {
     // Split input into 16x16 (256 threads per grid)
@@ -224,18 +414,16 @@ void sobel_kernel(uchar* in, int width, int height, uchar* out) {
     checkCudaCall(cudaGetLastError());
 
 
-    copy_horizontal<<<width - 2, 1>>>(out, width, height);
+    copy_horizontal<<<width - 2, 1>>>(out, width, height, 1);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 
-    copy_vertical<<<height, 1>>>(out, width, height);
+    copy_vertical<<<height, 1>>>(out, width, height, 1);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
-
 }
 
 void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels) {
-
     // Split input into 16x16 (256 threads per grid)
     dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
     dim3 block(threadBlockWidth, threadBlockHeight);
@@ -244,9 +432,10 @@ void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int 
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 
-    // copy_horizontal<<<width - 2, 1>>>(out, width, height);
-    // cudaDeviceSynchronize();
-    // copy_vertical<<<1, height>>>(out, width, height);
-    // cudaDeviceSynchronize();
+    copy_horizontal<<<width - 2, 1>>>(out, width, height, channels);
+    cudaDeviceSynchronize();
 
+    copy_vertical<<<height, 1>>>(out, width, height, channels);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
 }

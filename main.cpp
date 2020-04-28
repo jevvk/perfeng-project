@@ -765,36 +765,18 @@ int main(int argc, char** argv) {
   uchar* grad = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
   uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
 
-  printf("Creating image of %dx%d\n", new_width, new_height);
-
-  struct timeval tv_res, tv_med, tv_lum, tv_blur, tv_sobel, tv_refine, tv_end;
-  
-  gettimeofday(&tv_res, NULL);
-  resize(original, width, height, channels, scale, res);
-
-  gettimeofday(&tv_med, NULL);
-  // median3(res, new_width, new_height, blurred);
-  gaussian3(res, new_width, new_height, blurred);
-  
-  gettimeofday(&tv_lum, NULL);
-  luminance(blurred, new_width, new_height, channels, lum);
-
-  gettimeofday(&tv_blur , NULL);
-  for (int i = 0; i < UNBLUR_ITER; i++) {
-    push_grad(lum, new_width, new_height, tmp1c);
-
-    tmp = lum;
-    lum = tmp1c;
-    tmp1c = (uchar*) tmp;
-  }
-
-  gettimeofday(&tv_sobel, NULL);
+  /*
+   * GPU Allocations and memcpys
+   */
 
   uchar* remote_lum;
   uchar* remote_grad;
   uchar* remote_res;
   uchar* remote_tmpnc;
   uchar* remote_tmp1c;
+  uchar* remote_blurred;
+
+  create_device_image((void**) &remote_blurred,  new_width * new_height * channels * sizeof(uchar));
 
   create_device_image((void**) &remote_lum,    new_width * new_height * sizeof(uchar));
   create_device_image((void**) &remote_grad,   new_width * new_height * sizeof(uchar));
@@ -804,19 +786,42 @@ int main(int argc, char** argv) {
   create_device_image((void**) &remote_res,    new_width * new_height * channels * sizeof(uchar));
   create_device_image((void**) &remote_tmpnc,  new_width * new_height * channels * sizeof(uchar));
 
-  copy_to_device(remote_lum, lum, new_width * new_height * sizeof(uchar));
+
+  printf("Creating image of %dx%d\n", new_width, new_height);
+
+  struct timeval tv_res, tv_med, tv_lum, tv_blur, tv_sobel, tv_refine, tv_end;
+  
+  gettimeofday(&tv_res, NULL);
+  resize(original, width, height, channels, scale, res);
+
+  gettimeofday(&tv_med, NULL);
+  // median3(res, new_width, new_height, blurred);
+
   copy_to_device(remote_res, res, new_width * new_height * channels * sizeof(uchar));
+
+  gaussian3_kernel(remote_res, new_width, new_height, remote_blurred);
+
+  gettimeofday(&tv_lum, NULL);
+  luminance_kernel(remote_blurred, new_width, new_height, channels, remote_lum);
+  
+
+  gettimeofday(&tv_blur , NULL);
+  for (int i = 0; i < UNBLUR_ITER; i++) {
+    push_grad_kernel(remote_lum, new_width, new_height, remote_tmp1c);
+
+    tmp = remote_lum;
+    remote_lum = remote_tmp1c;
+    remote_tmp1c = (uchar*) tmp;
+  }
+
+  gettimeofday(&tv_sobel, NULL);
 
   sobel_kernel(remote_lum, new_width, new_height, remote_grad);
 
 
-  // sobel(lum, new_width, new_height, grad);
-
   gettimeofday(&tv_refine, NULL);
   for (int i = 0; i < REFINE_ITER; i++) {
     push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels);
-
-    // push_rgb(res, grad, tmpnc, tmp1c, new_width, new_height, channels);
 
     tmp = remote_res;
     remote_res = remote_tmpnc;
