@@ -70,9 +70,9 @@ __global__ void cu_luminance(uchar* in, int width, int height, int channels, uch
 
     if (i < 0 || i >= height || j < 0 || j >= width) return;
 
-    out[i * width + j] = 0.11 * in[i * width * channels + j * channels]
+    out[i * width + j] = 0.3  * in[i * width * channels + j * channels]
                        + 0.58 * in[i * width * channels + j * channels + 1]
-                       +  0.3 * in[i * width * channels + j * channels + 2];
+                       + 0.11 * in[i * width * channels + j * channels + 2];
 }
 
 __global__ void cu_resize(uchar* in, int width, int height, int channels, float scale, uchar* out) {
@@ -480,11 +480,11 @@ void gaussian3_kernel(uchar* in, int width, int height, uchar* out) {
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 
-    copy_horizontal<<<width - 2, 1>>>(out, width, height, 1);
+    copy_horizontal<<<width - 2, 1>>>(out, width, height, 3);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 
-    copy_vertical<<<height, 1>>>(out, width, height, 1);
+    copy_vertical<<<height, 1>>>(out, width, height, 3);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }
