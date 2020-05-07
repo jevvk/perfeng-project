@@ -1,3 +1,4 @@
+
 #include <cuda.h>
 #include "kernels.h"
 #include <stdio.h>
@@ -150,25 +151,53 @@ __global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
 
 /*
  * Gaussian kernel smoothes on a grayscale image with range 0-255.
+ * It then computes the difference between the input image and the smoothed pixel.
+ * This gives us an edge image normalized to range 0-255
  */
-__global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
+__global__ void cu_gaussian_diff_edge(uchar* in, int width, int height, uchar* _in, uchar* out, int n_iter) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
+    _in[i * width + j] = in[i * width + j];
     
+
+    __syncthreads();
+
     const float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
 
-    // TODO: Take into account edge pixels and dont read pixels out of bounds.
+    int lowX = max(j - 1, 0);
+    int highX = min(j + 2, width - 1);
+    int lowY = max(i - 1, 0);
+    int highY = min(i + 2, height - 1);
 
-    #pragma unroll
-    for (int ki = 0; ki < 3; ki++) {
-        for (int kj = 0; kj < 3; kj++) {
-            res += g[ki][kj] * in[(i + ki - 1) * width + (j + kj - 1)];
+    uchar* actual_out = out;
+
+    float gsum;
+    float sum;
+    for (int n = 0; n < n_iter; n++) {
+        // TODO: This can be optimized to one of three values (corner, edge, center)
+        gsum = 0.;
+        sum = 0.;
+
+        for (int kj = lowX; kj < highX; kj++) {
+            int gj = kj - lowX;
+            for (int ki = lowY; ki < highY; ki++) {
+                int gi = ki - lowY;
+                gsum += g[gj][gi];
+                sum += g[gj][gi] * in[ki * width + kj];
+            }
         }
+
+        out[i * width + j] = sum / gsum;
+        __syncthreads();
+
+        uchar* tmp = in;
+        in = out;
+        out = tmp;
     }
 
-    out[i * width + j] = res;
+    actual_out[i * width + j] = abs(_in[i * width + j] - sum / gsum);
 }
 
 
@@ -187,17 +216,17 @@ __global__ void cu_bitmask(uchar* in, int width, int height, uchar* out, int rad
     int highX = min(j + radius + 1, width - 1);
     int lowY = max(i - radius, 0);
     int highY = min(i + radius + 1, height - 1);
-    
+
     for (int x = lowX; x < highX; x++) {
         for (int y = lowY; y < highY; y++) {
             // If any value in the radius is large enough, this pixel has to be considered and the loop can terminate.
-            if (in[i * width + j] > threshold) {
+            if (in[y * width + x] > threshold) {
                 out[i * width + j] = 1;
                 return;
             }
         }
     }
-    
+    out[i * width + j] = 0;
 }
 
 __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
@@ -489,11 +518,29 @@ void gaussian3_kernel(uchar* in, int width, int height, uchar* out) {
     checkCudaCall(cudaGetLastError());
 }
 
-void bitmask_kernel(uchar* in, int width, int height, uchar* out) {
+void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, int n_iter) {
+    uchar* _in;
+    
+    create_device_image((void**) &_in, width * height * sizeof(uchar));
+    cudaDeviceSynchronize();
+
+
     dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
     dim3 block(threadBlockWidth, threadBlockHeight);
 
-    cu_bitmask<<<grid, block>>>(in, width, height, out);
+
+    cu_gaussian_diff_edge<<<grid, block>>>(in, width, height, _in, out, n_iter);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+
+    checkCudaCall(cudaFree(_in));
+}
+
+void bitmask_kernel(uchar* in, int width, int height, uchar* out, int radius, int threshold) {
+    dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);    
+    dim3 block(threadBlockWidth, threadBlockHeight);
+
+    cu_bitmask<<<grid, block>>>(in, width, height, out, radius, threshold);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }
