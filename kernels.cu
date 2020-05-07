@@ -122,13 +122,17 @@ __global__ void cu_resize(uchar* in, int width, int height, int channels, float 
     }
 }
 
+
+/*
+ * Gaussian3 kernel does smoothing on all three colour channels.
+ */
 __global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
     
-    float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
+    const float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
 
     #pragma unroll
     for (int c = 0; c < 3; c++) {
@@ -142,6 +146,58 @@ __global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
 
         out[i * width * 3 + j * 3 + c] = res;
     }
+}
+
+/*
+ * Gaussian kernel smoothes on a grayscale image with range 0-255.
+ */
+__global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
+    
+    const float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
+
+    // TODO: Take into account edge pixels and dont read pixels out of bounds.
+
+    #pragma unroll
+    for (int ki = 0; ki < 3; ki++) {
+        for (int kj = 0; kj < 3; kj++) {
+            res += g[ki][kj] * in[(i + ki - 1) * width + (j + kj - 1)];
+        }
+    }
+
+    out[i * width + j] = res;
+}
+
+
+/* 
+ * The bitmask kernel looks in a grayscale edge image (0-255) for any values in an area of radius larger than threshold.
+ * If any value is large enough, the bitmask sets the value to 1, 0 otherwise.
+ * This should allow the more specific use of exclusively pixels around edges and reduce operations.
+ */
+__global__ void cu_bitmask(uchar* in, int width, int height, uchar* out, int radius, int threshold) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
+
+    int lowX = max(j - radius, 0);
+    int highX = min(j + radius + 1, width - 1);
+    int lowY = max(i - radius, 0);
+    int highY = min(i + radius + 1, height - 1);
+    
+    for (int x = lowX; x < highX; x++) {
+        for (int y = lowY; y < highY; y++) {
+            // If any value in the radius is large enough, this pixel has to be considered and the loop can terminate.
+            if (in[i * width + j] > threshold) {
+                out[i * width + j] = 1;
+                return;
+            }
+        }
+    }
+    
 }
 
 __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
@@ -429,6 +485,15 @@ void gaussian3_kernel(uchar* in, int width, int height, uchar* out) {
     checkCudaCall(cudaGetLastError());
 
     copy_vertical<<<height, 1>>>(out, width, height, 1);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+}
+
+void bitmask_kernel(uchar* in, int width, int height, uchar* out) {
+    dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
+    dim3 block(threadBlockWidth, threadBlockHeight);
+
+    cu_bitmask<<<grid, block>>>(in, width, height, out);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }

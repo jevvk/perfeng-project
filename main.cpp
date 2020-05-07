@@ -816,7 +816,6 @@ int main(int argc, char** argv) {
 
   sobel_kernel(remote_lum, new_width, new_height, remote_grad);
 
-
   gettimeofday(&tv_refine, NULL);
   for (int i = 0; i < REFINE_ITER; i++) {
     push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels);
