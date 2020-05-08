@@ -261,9 +261,11 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     
     int c = i * width + j;
     out_grad[c] = grad[c];
-    cu_copyc(data, channels, out, c);
-    if (bitmask[c] == 0) return;
 
+    if (bitmask[c] == 0)  {
+        cu_copyc(data, channels, out, c);
+        return;
+    }
 
     int tl = (i - 1) * width + (j - 1);
     int tr = (i + 1) * width + (j - 1);
