@@ -15,7 +15,7 @@
 #define UNBLUR_ITER 3
 #define REFINE_ITER 5
 #define BITMASK_DILATE 3
-#define GAUSS_ITERS 10
+#define GAUSS_ITERS 3
 #define THRESHOLD_VAL 1
 
 #define uchar unsigned char
@@ -122,9 +122,9 @@ int main(int argc, char** argv) {
   for (int i = 0; i < BITMASK_DILATE; i++) {
     dilate_kernel(remote_edges, new_width, new_height, remote_tmp1c);
 
-    tmp = remote_lum;
-    remote_lum = remote_edges;
-    remote_edges = (uchar*) tmp;
+    tmp = remote_edges;
+    remote_edges = remote_tmp1c;
+    remote_tmp1c = (uchar*) tmp;
   }
 
   gettimeofday(&tv_blur , NULL);

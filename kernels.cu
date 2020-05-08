@@ -279,85 +279,99 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     int l = (i - 1) * width + j;
     int r = (i + 1) * width + j;
 
-    int min, max;
+    uchar gc = grad[c];
+
+    uchar gtl = grad[tl];
+    uchar gtr = grad[tr];
+
+    uchar gbl = grad[bl];
+    uchar gbr = grad[br];
+
+    uchar gt = grad[t];
+    uchar gb = grad[b];
+
+    uchar gl = grad[l];
+    uchar gr = grad[r];
+
+    uchar min, max;
 
     // vertical push top -> bottom
-    min = cu_argmin3(grad, tl, t, tr);
-    max = cu_argmax3(grad, bl, b, br);
+    min = cu_min3(gtl, gt, gtr);
+    max = cu_max3(gbl, gb, gbr);
 
-    if (grad[min] > grad[max]) {
+    if (min > max) {
         cu_blendc(data, channels, out, c, tl, t, tr);
-        out_grad[c] = cu_blend(grad[c], grad[tl], grad[t], grad[tr]);
+        out_grad[c] = cu_blend(gc, gtl, gt, gtr);
         return;
     }
 
     // vertical push bottom -> top
-    min = cu_argmin3(grad, bl, b, br);
-    max = cu_argmax3(grad, tl, t, tr);
+    min = cu_min3(gbl, gb, gbr);
+    max = cu_max3(gtl, gt, gtr);
 
-    if (grad[min] > grad[max]) {
+    if (min > max) {
         cu_blendc(data, channels, out, c, bl, b, br);
-        out_grad[c] = cu_blend(grad[c], grad[bl], grad[b], grad[br]);
+        out_grad[c] = cu_blend(gc, gbl, gb, gbr);
         return;
     }
 
     // horizontal push left -> right
-    min = cu_argmin3(grad, tl, l, bl);
-    max = cu_argmax3(grad, tr, r, br);
+    min = cu_min3(gtl, gl, gbl);
+    max = cu_max3(gtr, gr, gbr);
 
-    if (grad[min] > grad[max]) {
+    if (min > max) {
         cu_blendc(data, channels, out, c, tl, l, bl);
-        out_grad[c] = cu_blend(grad[c], grad[tl], grad[l], grad[bl]);
+        out_grad[c] = cu_blend(gc, gtl, gl, gbl);
         return;
     }
 
     // horizontal push right -> left
-    min = cu_argmin3(grad, tr, r, br);
-    max = cu_argmax3(grad, tl, l, bl);
+    min = cu_min3(gtr, gr, gbr);
+    max = cu_max3(gtl, gl, gbl);
 
-    if (grad[min] > grad[max]) {
+    if (min > max) {
         cu_blendc(data, channels, out, c, tr, r, br);
-        out_grad[c] = cu_blend(grad[c], grad[tr], grad[r], grad[br]);
+        out_grad[c] = cu_blend(gc, gtr, gr, gbr);
         return;
     }
 
     // diagonal push top right -> bottom left
-    min = cu_argmin3(grad, t, c, r);
-    max = cu_argmax3(grad, l, bl, b);
+    min = cu_min3(gt, gc, gr);
+    max = cu_max3(gl, gbl, gb);
 
-    if (grad[min] > grad[c] && grad[c] > grad[max]) {
+    if (min > gc && gc > max) {
         cu_blendc(data, channels, out, c, t, tr, r);
-        out_grad[c] = cu_blend(grad[c], grad[t], grad[tr], grad[r]);
+        out_grad[c] = cu_blend(gc, gt, gtr, gr);
         return;
     }
 
     // diagonal push bottom left -> top right
-    min = cu_argmin3(grad, b, c, l);
-    max = cu_argmax3(grad, r, tr, t);
+    min = cu_min3(gb, gc, gl);
+    max = cu_max3(gr, gtr, gt);
 
-    if (grad[min] > grad[c] && grad[c] > grad[max]) {
+    if (min > gc && gc > max) {
         cu_blendc(data, channels, out, c, b, bl, l);
-        out_grad[c] = cu_blend(grad[c], grad[b], grad[bl], grad[l]);
+        out_grad[c] = cu_blend(gc, gb, gbl, gl);
         return;
     }
 
     // diagonal push top left -> bottom right
-    min = cu_argmin3(grad, t, c, l);
-    max = cu_argmax3(grad, r, br, b);
+    min = cu_min3(gt, gc, gl);
+    max = cu_max3(gr, gbr, gb);
 
-    if (grad[min] > grad[c] && grad[c] > grad[max]) {
+    if (min > gc && gc > max) {
         cu_blendc(data, channels, out, c, t, tl, l);
-        out_grad[c] = cu_blend(grad[c], grad[t], grad[tl], grad[l]);
+        out_grad[c] = cu_blend(gc, gt, gtl, gl);
         return;
     }
 
     // diagonal push bottom right -> top left
-    min = cu_argmin3(grad, b, c, r);
-    max = cu_argmax3(grad, l, tl, t);
+    min = cu_min3(gb, gc, gr);
+    max = cu_max3(gl, gtl, gt);
 
-    if (grad[min] > grad[c] && grad[c] > grad[max]) {
+    if (min > gc && gc > max) {
         cu_blendc(data, channels, out, c, b, br, r);
-        out_grad[c] = cu_blend(grad[c], grad[b], grad[br], grad[r]);
+        out_grad[c] = cu_blend(gc, gb, gbr, gr);
         return;
     }
 
