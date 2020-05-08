@@ -10,8 +10,6 @@
 const int threadBlockWidth  = 16;
 const int threadBlockHeight = 16;
 
-uchar* bitmask_array = NULL;
-
 static void checkCudaCall(cudaError_t result) {
     if (result != cudaSuccess) {
         printf("Error:: %s: %s\n", cudaGetErrorName(result), cudaGetErrorString(result));
@@ -379,13 +377,18 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     out_grad[c] = grad[c];
 }
 
-__global__ void cu_push_grad(uchar* in, int width, int height, uchar* out) {
+__global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar* bitmask) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
 
     int c = in[i * width + j];
+
+    if (bitmask[i * width + j] == 0)  {
+        out[i * width + j] = c;
+        return;
+    }
 
     int tl = in[(i - 1) * width + (j - 1)];
     int tr = in[(i + 1) * width + (j - 1)];
@@ -608,12 +611,12 @@ void luminance_kernel(uchar* in, int width, int height, int channels, uchar* out
     checkCudaCall(cudaGetLastError());
 }
 
-void push_grad_kernel(uchar* in, int width, int height, uchar* out) {
+void push_grad_kernel(uchar* in, int width, int height, uchar* out, uchar* bitmask) {
     // Split input into 16x16 (256 threads per grid)
     dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
     dim3 block(threadBlockWidth, threadBlockHeight);
 
-    cu_push_grad<<<grid, block>>>(in, width, height, out);
+    cu_push_grad<<<grid, block>>>(in, width, height, out, bitmask);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 

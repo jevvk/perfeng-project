@@ -108,16 +108,15 @@ int main(int argc, char** argv) {
   resize_kernel(remote_original, width, height, channels, scale, remote_res);
 
   gettimeofday(&tv_med, NULL);
-  gaussian3_kernel(remote_res, new_width, new_height, remote_blurred);
+  // gaussian3_kernel(remote_res, new_width, new_height, remote_blurred);
 
   // TODO: Optimize this to not do double luminance and double gaussian.
   gettimeofday(&tv_lum, NULL);
-  luminance_kernel(remote_blurred, new_width, new_height, channels, remote_lum);
+  // luminance_kernel(remote_blurred, new_width, new_height, channels, remote_lum);
+  luminance_kernel(remote_res, new_width, new_height, channels, remote_lum_sharp);
 
   gettimeofday(&tv_gaus_diff, NULL);
-  luminance_kernel(remote_res, new_width, new_height, channels, remote_lum_sharp);
-  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, remote_tmp1c, GAUSS_ITERS, THRESHOLD_VAL);
-  // bitmask_kernel(remote_edges, new_width, new_height, remote_bitmask, 1);
+  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, remote_lum, GAUSS_ITERS, THRESHOLD_VAL);
 
   for (int i = 0; i < BITMASK_DILATE; i++) {
     dilate_kernel(remote_edges, new_width, new_height, remote_tmp1c);
@@ -129,7 +128,7 @@ int main(int argc, char** argv) {
 
   gettimeofday(&tv_blur , NULL);
   for (int i = 0; i < UNBLUR_ITER; i++) {
-    push_grad_kernel(remote_lum, new_width, new_height, remote_tmp1c);
+    push_grad_kernel(remote_lum, new_width, new_height, remote_tmp1c, remote_edges);
 
     tmp = remote_lum;
     remote_lum = remote_tmp1c;
@@ -158,11 +157,22 @@ int main(int argc, char** argv) {
   gettimeofday(&tv_end, NULL);
   
   copy_from_device(res, remote_res, new_width * new_height * channels * sizeof(uchar));
+  copy_from_device(tmp1c, remote_edges, new_width * new_height * sizeof(uchar));
 
   err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
   if (err) {
     printf("Error during saving file to %s\n", argv[3]);
   }
+
+  int pos = 0;
+  for (int i = 0; i < new_height; i++) {
+    for (int j = 0; j < new_width; j++) {
+      pos += tmp1c[i * new_width + j];
+    }
+  }
+  int size = new_width * new_height;
+  printf("%d/%d pixels (%.2f percent skipped)\n", pos, size, (((size - pos)) / (float)size) * 100.0);
+
 
   free(upscaled);
   free(lum);
