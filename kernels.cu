@@ -128,13 +128,12 @@ __global__ void cu_resize(uchar* in, int width, int height, int channels, float 
 /*
  * Gaussian3 kernel does smoothing on all three colour channels.
  */
+__constant__ float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
 __global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
-    
-    const float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
 
     #pragma unroll
     for (int c = 0; c < 3; c++) {
@@ -156,21 +155,57 @@ __global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
  * This gives us an edge image normalized to range 0-255
  */
 __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
-    int j = blockIdx.x * blockDim.x + threadIdx.x;
-    int i = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;    
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
     
-    const float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
-    float res = 0;
+    const int sWidth = threadBlockWidth + 2;
+    const int sHeight = threadBlockHeight + 2;
 
-    for (int ki = 0; ki < 3; ki++) {
-        for (int kj = 0; kj < 3; kj++) {
-            res += g[ki][kj] * in[(i + ki - 1) * width + (j + kj - 1)];
+    // Load memory into shared memory
+    __shared__ double shared_in[sWidth * sHeight];
+            
+    // Left top corner of the to be loaded data.
+    int dest  = threadIdx.y * threadBlockWidth + threadIdx.x;
+    int destY = dest / sWidth;     
+    int destX = dest % sWidth;		
+    int srcY  = blockIdx.y * threadBlockHeight + destY; 
+    int srcX  = blockIdx.x * threadBlockWidth + destX; 
+    int src   = srcY * width + srcX;  
+    
+    // Set pixel        
+    if (srcX < width && srcY < height) {
+        shared_in[dest] = in[src];
+    }
+
+    // Load the second batch of pixels if necessary
+    dest  = threadIdx.y * threadBlockWidth + threadIdx.x + (threadBlockWidth * threadBlockHeight);
+    destY = dest / sWidth;
+    destX = dest % sWidth;
+    srcY  = blockIdx.y * threadBlockHeight + destY;
+    srcX  = blockIdx.x * threadBlockWidth + destX;
+    src   = srcY * width + srcX;
+    if (destY < sHeight && srcY < height && srcX < width) {
+        shared_in[dest] = in[src];
+    }
+
+    __syncthreads();
+
+    if (x >= width - 2 || y >= height - 2) return;
+    
+    float res = 0;
+    const int tx = threadIdx.x;
+    const int ty = threadIdx.y;
+
+    for (int ky = 0; ky < 3; ky++) {
+        int tty = ty + ky;
+        for (int kx = 0; kx < 3; kx++) {
+            // res += g[ky][kx] * in[(y + ky) * width + (x + kx)];
+            res += g[ky][kx] * shared_in[tty * sWidth + (tx + kx)];
         }
     }
 
-    out[i * width + j] = res;
+    out[(y + 1) * width + (x + 1)] = res;
+    
 }
 
 __global__ void cu_diff_edge_thresh(uchar* in, uchar* in_smooth, int width, int height, int threshold, uchar* out) {
