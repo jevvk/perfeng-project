@@ -175,13 +175,14 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     out[i * width + j] = res;
 }
 
-__global__ void cu_diff_edge(uchar* in, uchar* in_smooth, int width, int height, uchar* out) {
+__global__ void cu_diff_edge_thresh(uchar* in, uchar* in_smooth, int width, int height, int threshold, uchar* out) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i >= height || j >= width) return;    
 
-    out[i * width + j] = abs(in[i * width + j] - in_smooth[i * width + j]);
+    uchar res = abs(in[i * width + j] - in_smooth[i * width + j]);
+    out[i * width + j] = res > threshold ? 1 : 0;
 }
 
 
@@ -190,25 +191,43 @@ __global__ void cu_diff_edge(uchar* in, uchar* in_smooth, int width, int height,
  * If any value is large enough, the bitmask sets the value to 1, 0 otherwise.
  * This should allow the more specific use of exclusively pixels around edges and reduce operations.
  */
-__global__ void cu_bitmask(uchar* in, int width, int height, uchar* out, int threshold) {
+__global__ void cu_dilate(uchar* in, int width, int height, uchar* out) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < BITMASK_RADIUS || i >= height - BITMASK_RADIUS || j < BITMASK_RADIUS || j >= width - BITMASK_RADIUS) return;
 
+    uchar kernel[3][3] = { {0, 1, 0}, {1, 1, 1}, {0, 1, 0} };
+
     #pragma unroll
-    for (int y = -BITMASK_RADIUS; y < BITMASK_RADIUS + 1; y++) {
-        int ii = i + y;
-        for (int x = -BITMASK_RADIUS; x < BITMASK_RADIUS + 1; x++) {
-            int jj = j + x;
-            // If any value in the radius is large enough, this pixel has to be considered and the loop can terminate.
-            if (in[ii * width + jj] > threshold) {
-                out[ii * width + jj] = 1;
+    for (int ii = 0; ii < 3; ii++) {
+        #pragma unroll
+        for (int jj = 0; jj < 3; jj++) {
+            // hope compiler optimizez this
+            if (kernel[ii][jj] == 0) {
+                continue;
+            }
+
+            if (in[(i + ii - 1) * width + j + jj - 1] == 1) {
+                out[i * width + j] = 1;
                 return;
             }
         }
     }
+
     out[i * width + j] = 0;
+
+
+    // for (int y = -BITMASK_RADIUS; y < BITMASK_RADIUS + 1; y++) {
+    //     int ii = i + y;
+    //     for (int x = -BITMASK_RADIUS; x < BITMASK_RADIUS + 1; x++) {
+    //         int jj = j + x;
+    //         if (in[ii * width + jj] == 1) {
+    //             out[ii * width + jj]) = 1;
+    //         }
+    //     }
+    // }
+    // out[i * width + j] = 0;
 }
 
 __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
@@ -513,7 +532,7 @@ void gaussian3_kernel(uchar* in, int width, int height, uchar* out) {
     checkCudaCall(cudaGetLastError());
 }
 
-void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uchar* worker_arr, int n_iter) {
+void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uchar* worker_arr, int n_iter, int threshold) {
     uchar* orig_in = in;
     uchar* orig_out = out;
     
@@ -540,16 +559,16 @@ void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uch
         worker_arr = tmp;
     }
 
-    cu_diff_edge<<<grid, block>>>(orig_in, worker_arr, width, height, orig_out);
+    cu_diff_edge_thresh<<<grid, block>>>(orig_in, worker_arr, width, height, threshold, orig_out);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }
 
-void bitmask_kernel(uchar* in, int width, int height, uchar* out, int threshold) {
+void dilate_kernel(uchar* in, int width, int height, uchar* out) {
     dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);    
     dim3 block(threadBlockWidth, threadBlockHeight);
 
-    cu_bitmask<<<grid, block>>>(in, width, height, out, threshold);
+    cu_dilate<<<grid, block>>>(in, width, height, out);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }

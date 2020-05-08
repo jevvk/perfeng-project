@@ -14,6 +14,7 @@
 #define RGB_STRENGTH 0.5
 #define UNBLUR_ITER 3
 #define REFINE_ITER 5
+#define BITMASK_DILATE 5
 
 #define uchar unsigned char
 
@@ -113,8 +114,16 @@ int main(int argc, char** argv) {
 
   gettimeofday(&tv_gaus_diff, NULL);
   luminance_kernel(remote_res, new_width, new_height, channels, remote_lum_sharp);
-  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, remote_tmp1c, 25);
-  bitmask_kernel(remote_edges, new_width, new_height, remote_bitmask, 1);
+  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, remote_tmp1c, 5, 1);
+  // bitmask_kernel(remote_edges, new_width, new_height, remote_bitmask, 1);
+
+  for (int i = 0; i < BITMASK_DILATE; i++) {
+    dilate_kernel(remote_edges, new_width, new_height, remote_tmp1c);
+
+    tmp = remote_lum;
+    remote_lum = remote_edges;
+    remote_edges = (uchar*) tmp;
+  }
 
   gettimeofday(&tv_blur , NULL);
   for (int i = 0; i < UNBLUR_ITER; i++) {
@@ -131,7 +140,7 @@ int main(int argc, char** argv) {
 
   gettimeofday(&tv_refine, NULL);
   for (int i = 0; i < REFINE_ITER; i++) {
-    push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels, remote_bitmask);
+    push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels, remote_edges);
 
     tmp = remote_res;
     remote_res = remote_tmpnc;
