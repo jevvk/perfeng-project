@@ -20,13 +20,13 @@ void resize_kernel(uchar* in, int width, int height, int channels, float scale, 
 void gaussian3_kernel(uchar* in, int width, int height, uchar* out);
 
 // Our additions.
-void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, int n_iter);
-void bitmask_kernel(uchar* in, int width, int height, uchar* out, int radius, int threshold);
+void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uchar* worker_arr, int n_iter);
+void bitmask_kernel(uchar* in, int width, int height, uchar* out, int threshold);
 
 void luminance_kernel(uchar* in, int width, int height, int channels, uchar* out);
 void push_grad_kernel(unsigned char* in, int width, int height, unsigned char* out);
 void sobel_kernel(unsigned char* in, int width, int height, unsigned char* out);
-void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels);
+void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels, uchar* bitmask);
 #else
 void resize(uchar* in, int width, int height, int channels, float scale, uchar* out);
 void luminance(uchar* in, int width, int height, int channels, uchar* out);

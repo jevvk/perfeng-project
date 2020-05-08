@@ -110,66 +110,43 @@ int main(int argc, char** argv) {
   // TODO: Optimize this to not do double luminance and double gaussian.
   gettimeofday(&tv_lum, NULL);
   luminance_kernel(remote_blurred, new_width, new_height, channels, remote_lum);
-  luminance_kernel(remote_res, new_width, new_height, channels, remote_lum_sharp);
 
   gettimeofday(&tv_gaus_diff, NULL);
-  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, 3);
-  bitmask_kernel(remote_edges, new_width, new_height, remote_bitmask, 10, 30);
+  luminance_kernel(remote_res, new_width, new_height, channels, remote_lum_sharp);
+  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, remote_tmp1c, 25);
+  bitmask_kernel(remote_edges, new_width, new_height, remote_bitmask, 1);
 
-  copy_from_device(lum, remote_bitmask, new_width * new_height * sizeof(uchar));
+  gettimeofday(&tv_blur , NULL);
+  for (int i = 0; i < UNBLUR_ITER; i++) {
+    push_grad_kernel(remote_lum, new_width, new_height, remote_tmp1c);
 
-  int min = 1290;
-  int max = 0;
-  for (int i = 0; i < new_height; i++) {
-    for (int j = 0; j < new_width; j++) {
-      for (int n = 0; n < 3; n++) { // Channels
-        int val = lum[i * new_width + j];
-        
-        if (val > max) {
-          max = val;
-        }
-        if (val < min) {
-          min = val;
-        }
-
-        // res[(i * new_width + j) * 3 + n] = lum[i * new_width + j];
-        res[(i * new_width + j) * 3 + n] = lum[i * new_width + j] * 255;
-      }
-    }
+    tmp = remote_lum;
+    remote_lum = remote_tmp1c;
+    remote_tmp1c = (uchar*) tmp;
   }
-  printf("%d %d\n", min, max);
 
-  // gettimeofday(&tv_blur , NULL);
-  // for (int i = 0; i < UNBLUR_ITER; i++) {
-  //   push_grad_kernel(remote_lum, new_width, new_height, remote_tmp1c);
+  gettimeofday(&tv_sobel, NULL);
 
-  //   tmp = remote_lum;
-  //   remote_lum = remote_tmp1c;
-  //   remote_tmp1c = (uchar*) tmp;
-  // }
+  sobel_kernel(remote_lum, new_width, new_height, remote_grad);
 
-  // gettimeofday(&tv_sobel, NULL);
+  gettimeofday(&tv_refine, NULL);
+  for (int i = 0; i < REFINE_ITER; i++) {
+    push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels, remote_bitmask);
 
-  // sobel_kernel(remote_lum, new_width, new_height, remote_grad);
+    tmp = remote_res;
+    remote_res = remote_tmpnc;
+    remote_tmpnc = (uchar*) tmp;
 
-  // gettimeofday(&tv_refine, NULL);
-  // for (int i = 0; i < REFINE_ITER; i++) {
-  //   push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels);
+    // push_grad(grad, new_width, new_height, tmp1c);
 
-  //   tmp = remote_res;
-  //   remote_res = remote_tmpnc;
-  //   remote_tmpnc = (uchar*) tmp;
-
-  //   // push_grad(grad, new_width, new_height, tmp1c);
-
-  //   tmp = remote_grad;
-  //   remote_grad = remote_tmp1c;
-  //   remote_tmp1c = (uchar*) tmp;
-  // }
+    tmp = remote_grad;
+    remote_grad = remote_tmp1c;
+    remote_tmp1c = (uchar*) tmp;
+  }
   
-  // gettimeofday(&tv_end, NULL);
+  gettimeofday(&tv_end, NULL);
   
-  // copy_from_device(res, remote_res, new_width * new_height * channels * sizeof(uchar));
+  copy_from_device(res, remote_res, new_width * new_height * channels * sizeof(uchar));
 
   err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
   if (err) {
@@ -185,7 +162,8 @@ int main(int argc, char** argv) {
   printf("Total compute time: %.5f\n", get_time(tv_res, tv_end));
   printf("  Resizing:   %.5f\n", get_time(tv_res, tv_med));
   printf("  Blurring:   %.5f\n", get_time(tv_med, tv_lum));
-  printf("  Luminance:  %.5f\n", get_time(tv_lum, tv_blur));
+  printf("  Luminance:  %.5f\n", get_time(tv_lum, tv_gaus_diff));
+  printf("  Gauss + Edge:  %.5f\n", get_time(tv_gaus_diff, tv_blur));
   printf("  Unblurring: %.5f\n", get_time(tv_blur, tv_sobel));
   printf("  Sobel:      %.5f\n", get_time(tv_sobel, tv_refine));
   printf("  Refining:   %.5f\n", get_time(tv_refine, tv_end));

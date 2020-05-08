@@ -5,9 +5,12 @@
 
 #define uchar unsigned char
 #define RGB_STRENGTH 0.5
+#define BITMASK_RADIUS 5
 
 const int threadBlockWidth  = 16;
 const int threadBlockHeight = 16;
+
+uchar* bitmask_array = NULL;
 
 static void checkCudaCall(cudaError_t result) {
     if (result != cudaSuccess) {
@@ -154,50 +157,31 @@ __global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
  * It then computes the difference between the input image and the smoothed pixel.
  * This gives us an edge image normalized to range 0-255
  */
-__global__ void cu_gaussian_diff_edge(uchar* in, int width, int height, uchar* _in, uchar* out, int n_iter) {
+__global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
-    _in[i * width + j] = in[i * width + j];
+    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;    
     
-
-    __syncthreads();
-
     const float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
+    float res = 0;
 
-    int lowX = max(j - 1, 0);
-    int highX = min(j + 2, width - 1);
-    int lowY = max(i - 1, 0);
-    int highY = min(i + 2, height - 1);
-
-    uchar* actual_out = out;
-
-    float gsum;
-    float sum;
-    for (int n = 0; n < n_iter; n++) {
-        // TODO: This can be optimized to one of three values (corner, edge, center)
-        gsum = 0.;
-        sum = 0.;
-
-        for (int kj = lowX; kj < highX; kj++) {
-            int gj = kj - lowX;
-            for (int ki = lowY; ki < highY; ki++) {
-                int gi = ki - lowY;
-                gsum += g[gj][gi];
-                sum += g[gj][gi] * in[ki * width + kj];
-            }
+    for (int ki = 0; ki < 3; ki++) {
+        for (int kj = 0; kj < 3; kj++) {
+            res += g[ki][kj] * in[(i + ki - 1) * width + (j + kj - 1)];
         }
-
-        out[i * width + j] = sum / gsum;
-        __syncthreads();
-
-        uchar* tmp = in;
-        in = out;
-        out = tmp;
     }
 
-    actual_out[i * width + j] = abs(_in[i * width + j] - sum / gsum);
+    out[i * width + j] = res;
+}
+
+__global__ void cu_diff_edge(uchar* in, uchar* in_smooth, int width, int height, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i >= height || j >= width) return;    
+
+    out[i * width + j] = abs(in[i * width + j] - in_smooth[i * width + j]);
 }
 
 
@@ -206,22 +190,20 @@ __global__ void cu_gaussian_diff_edge(uchar* in, int width, int height, uchar* _
  * If any value is large enough, the bitmask sets the value to 1, 0 otherwise.
  * This should allow the more specific use of exclusively pixels around edges and reduce operations.
  */
-__global__ void cu_bitmask(uchar* in, int width, int height, uchar* out, int radius, int threshold) {
+__global__ void cu_bitmask(uchar* in, int width, int height, uchar* out, int threshold) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
+    if (i < BITMASK_RADIUS || i >= height - BITMASK_RADIUS || j < BITMASK_RADIUS || j >= width - BITMASK_RADIUS) return;
 
-    int lowX = max(j - radius, 0);
-    int highX = min(j + radius + 1, width - 1);
-    int lowY = max(i - radius, 0);
-    int highY = min(i + radius + 1, height - 1);
-
-    for (int x = lowX; x < highX; x++) {
-        for (int y = lowY; y < highY; y++) {
+    #pragma unroll
+    for (int y = -BITMASK_RADIUS; y < BITMASK_RADIUS + 1; y++) {
+        int ii = i + y;
+        for (int x = -BITMASK_RADIUS; x < BITMASK_RADIUS + 1; x++) {
+            int jj = j + x;
             // If any value in the radius is large enough, this pixel has to be considered and the loop can terminate.
-            if (in[y * width + x] > threshold) {
-                out[i * width + j] = 1;
+            if (in[ii * width + jj] > threshold) {
+                out[ii * width + jj] = 1;
                 return;
             }
         }
@@ -252,13 +234,17 @@ __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
     }
 }
 
-__global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels) {
+__global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels, uchar* bitmask) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
-    int i = blockIdx.y * blockDim.y + threadIdx.y;
-
+    int i = blockIdx.y * blockDim.y + threadIdx.y;    
+    
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
-
+    
     int c = i * width + j;
+    out_grad[c] = grad[c];
+    cu_copyc(data, channels, out, c);
+    if (bitmask[c] == 0) return;
+
 
     int tl = (i - 1) * width + (j - 1);
     int tr = (i + 1) * width + (j - 1);
@@ -473,6 +459,15 @@ __global__ void copy_vertical(uchar* img, int width, int height, int channels) {
     }
 }
 
+__global__ void copy_all(uchar* img, int width, int height, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i >= height || j >= width) return;
+
+    out[i * width + j] = img[i * width + j];
+}
+
 
 void create_device_image(void** ptr, int size) {
     checkCudaCall(cudaMalloc(ptr, size));
@@ -518,29 +513,43 @@ void gaussian3_kernel(uchar* in, int width, int height, uchar* out) {
     checkCudaCall(cudaGetLastError());
 }
 
-void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, int n_iter) {
-    uchar* _in;
+void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uchar* worker_arr, int n_iter) {
+    uchar* orig_in = in;
+    uchar* orig_out = out;
     
-    create_device_image((void**) &_in, width * height * sizeof(uchar));
-    cudaDeviceSynchronize();
-
-
+    
     dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
     dim3 block(threadBlockWidth, threadBlockHeight);
+    
+    copy_all<<<grid, block>>>(in, width, height, worker_arr);
+    printf("Created in copy\n");
+    for (int i = 0; i < n_iter; i++) {
+        cu_gaussian<<<grid, block>>>(worker_arr, width, height, out);
+        cudaDeviceSynchronize();
+        checkCudaCall(cudaGetLastError());
+        
+        uchar* tmp = out;
+        out = worker_arr;
+        worker_arr = tmp;
+    }
+    printf("Smoothed array.\n");
 
+    if (n_iter % 2 == 1) {
+        uchar* tmp = out;
+        out = worker_arr;
+        worker_arr = tmp;
+    }
 
-    cu_gaussian_diff_edge<<<grid, block>>>(in, width, height, _in, out, n_iter);
+    cu_diff_edge<<<grid, block>>>(orig_in, worker_arr, width, height, orig_out);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
-
-    checkCudaCall(cudaFree(_in));
 }
 
-void bitmask_kernel(uchar* in, int width, int height, uchar* out, int radius, int threshold) {
+void bitmask_kernel(uchar* in, int width, int height, uchar* out, int threshold) {
     dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);    
     dim3 block(threadBlockWidth, threadBlockHeight);
 
-    cu_bitmask<<<grid, block>>>(in, width, height, out, radius, threshold);
+    cu_bitmask<<<grid, block>>>(in, width, height, out, threshold);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }
@@ -595,12 +604,12 @@ void sobel_kernel(uchar* in, int width, int height, uchar* out) {
     checkCudaCall(cudaGetLastError());
 }
 
-void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels) {
+void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels, uchar* bitmask) {
     // Split input into 16x16 (256 threads per grid)
     dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
     dim3 block(threadBlockWidth, threadBlockHeight);
 
-    cu_push_rgb<<<grid, block>>>(data, grad, out, out_grad, width, height, channels);
+    cu_push_rgb<<<grid, block>>>(data, grad, out, out_grad, width, height, channels, bitmask);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 
