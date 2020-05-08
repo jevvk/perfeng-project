@@ -14,7 +14,8 @@
 #define RGB_STRENGTH 0.5
 #define UNBLUR_ITER 3
 #define REFINE_ITER 5
-#define BITMASK_DILATE 15
+#define BITMASK_DILATE 3
+#define GAUSS_ITERS 10
 #define THRESHOLD_VAL 1
 
 #define uchar unsigned char
@@ -115,7 +116,7 @@ int main(int argc, char** argv) {
 
   gettimeofday(&tv_gaus_diff, NULL);
   luminance_kernel(remote_res, new_width, new_height, channels, remote_lum_sharp);
-  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, remote_tmp1c, 5, THRESHOLD_VAL);
+  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, remote_tmp1c, GAUSS_ITERS, THRESHOLD_VAL);
   // bitmask_kernel(remote_edges, new_width, new_height, remote_bitmask, 1);
 
   for (int i = 0; i < BITMASK_DILATE; i++) {
