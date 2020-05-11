@@ -162,7 +162,7 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     const int sHeight = threadBlockHeight + 2;
 
     // Load memory into shared memory
-    __shared__ double shared_in[sWidth * sHeight];
+    __shared__ unsigned char shared_in[sWidth * sHeight];
             
     // Left top corner of the to be loaded data.
     int dest  = threadIdx.y * threadBlockWidth + threadIdx.x;
