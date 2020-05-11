@@ -10,6 +10,8 @@
 const int threadBlockWidth  = 16;
 const int threadBlockHeight = 16;
 
+const int test = 123;
+
 static void checkCudaCall(cudaError_t result) {
     if (result != cudaSuccess) {
         printf("Error:: %s: %s\n", cudaGetErrorName(result), cudaGetErrorString(result));
@@ -162,7 +164,7 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     const int sHeight = threadBlockHeight + 2;
 
     // Load memory into shared memory
-    __shared__ double shared_in[sWidth * sHeight];
+    __shared__ unsigned char shared_in[sWidth * sHeight];
             
     // Left top corner of the to be loaded data.
     int dest  = threadIdx.y * threadBlockWidth + threadIdx.x;
@@ -199,7 +201,7 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     for (int ky = 0; ky < 3; ky++) {
         int tty = ty + ky;
         for (int kx = 0; kx < 3; kx++) {
-            // res += g[ky][kx] * in[(y + ky) * width + (x + kx)];
+            //res += g[ky][kx] * in[(y + ky) * width + (x + kx)];
             res += g[ky][kx] * shared_in[tty * sWidth + (tx + kx)];
         }
     }
