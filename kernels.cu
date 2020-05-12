@@ -289,10 +289,10 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
     
     int c = i * width + j;
-    out_grad[c] = grad[c];
 
     if (bitmask[c] == 0)  {
         cu_copyc(data, channels, out, c);
+        out_grad[c] = grad[c];
         return;
     }
 
@@ -365,7 +365,7 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
         out_grad[c] = cu_blend(gc, gt, gtr, gr);
         break;
     case 12: // vertical push top -> bottom
-    case 14:
+    case 4:
         cu_blendc(data, channels, out, c, tl, t, tr);
         out_grad[c] = cu_blend(gc, gtl, gt, gtr);
         break;
