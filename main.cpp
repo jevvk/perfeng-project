@@ -11,6 +11,7 @@
 #define LOADBMP_IMPLEMENTATION
 #include "bmp.h"
 
+#define CHANNELS 3 // bmp always has 3 channels (r, g, b)
 #define RGB_STRENGTH 0.5
 #define UNBLUR_ITER 3
 #define REFINE_ITER 5
@@ -19,6 +20,19 @@
 #define THRESHOLD_VAL 1
 
 #define uchar unsigned char
+
+struct cuda_images {
+  uchar* remote_lum;
+  uchar* remote_grad;
+  uchar* remote_res;
+  uchar* remote_tmpnc;
+  uchar* remote_tmp1c;
+  uchar* remote_blurred;
+  uchar* remote_original;
+  uchar* remote_lum_sharp;
+  uchar* remote_edges;
+  uchar* remote_bitmask;
+};
 
 void usage(char* program_name) {
   printf("Usage: %s scale input_image output_image\n", program_name);
@@ -29,6 +43,103 @@ double get_time(timeval start, timeval end) {
   return (double) (end.tv_usec - start.tv_usec) / 1000000 +
          (double) (end.tv_sec - start.tv_sec);
 }
+
+double tot_all, tot_res, tot_lum, tot_blur, tot_sobel, tot_refine, tot_end, tot_gaus_diff, tot_transfer;
+long long tot_skip;
+
+void init_cuda_images(struct cuda_images* ci, int new_width, int new_height) {
+  create_device_image((void**) &ci->remote_original,  new_width * new_height * CHANNELS * sizeof(uchar));
+  create_device_image((void**) &ci->remote_blurred,   new_width * new_height * CHANNELS * sizeof(uchar));
+  create_device_image((void**) &ci->remote_lum,       new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &ci->remote_grad,      new_width * new_height * sizeof(uchar));
+
+  // Data required for possible bitmask optimization.
+  create_device_image((void**) &ci->remote_lum_sharp, new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &ci->remote_edges,     new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &ci->remote_bitmask,   new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &ci->remote_tmp1c,     new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &ci->remote_res,       new_width * new_height * CHANNELS * sizeof(uchar));
+  create_device_image((void**) &ci->remote_tmpnc,     new_width * new_height * CHANNELS * sizeof(uchar));
+}
+
+void process_image_cuda(struct cuda_images* ci, uchar* original, uchar* res, uchar* tmp1c, int width, int height, int scale) {
+  void* tmp;
+
+  int new_width = floor(scale * width);
+  int new_height = floor(scale * height);
+
+  struct timeval tv_res, tv_lum, tv_blur, tv_sobel, tv_refine, tv_end, tv_gaus_diff, tv_transfer;
+  
+  gettimeofday(&tv_res, NULL);
+  resize_kernel(ci->remote_original, width, height, CHANNELS, scale, ci->remote_res);
+
+  gettimeofday(&tv_lum, NULL);
+  luminance_kernel(ci->remote_res, new_width, new_height, CHANNELS, ci->remote_lum_sharp);
+
+  gettimeofday(&tv_gaus_diff, NULL);
+  gaussian_diff_edge_kernel(ci->remote_lum_sharp, new_width, new_height, ci->remote_edges, ci->remote_lum, GAUSS_ITERS, THRESHOLD_VAL);
+
+  for (int i = 0; i < BITMASK_DILATE; i++) {
+    dilate_kernel(ci->remote_edges, new_width, new_height, ci->remote_tmp1c);
+
+    tmp = ci->remote_edges;
+    ci->remote_edges = ci->remote_tmp1c;
+    ci->remote_tmp1c = (uchar*) tmp;
+  }
+
+  gettimeofday(&tv_blur , NULL);
+  for (int i = 0; i < UNBLUR_ITER; i++) {
+    push_grad_kernel(ci->remote_lum, new_width, new_height, ci->remote_tmp1c, ci->remote_edges);
+
+    tmp = ci->remote_lum;
+    ci->remote_lum = ci->remote_tmp1c;
+    ci->remote_tmp1c = (uchar*) tmp;
+  }
+
+  gettimeofday(&tv_sobel, NULL);
+
+  sobel_kernel(ci->remote_lum, new_width, new_height, ci->remote_grad);
+
+  gettimeofday(&tv_refine, NULL);
+  for (int i = 0; i < REFINE_ITER; i++) {
+    push_rgb_kernel(ci->remote_res, ci->remote_grad, ci->remote_tmpnc, ci->remote_tmp1c, new_width, new_height, CHANNELS, ci->remote_edges);
+
+    tmp = ci->remote_res;
+    ci->remote_res = ci->remote_tmpnc;
+    ci->remote_tmpnc = (uchar*) tmp;
+
+    // push_grad(grad, new_width, new_height, tmp1c);
+
+    tmp = ci->remote_grad;
+    ci->remote_grad = ci->remote_tmp1c;
+    ci->remote_tmp1c = (uchar*) tmp;
+  }
+  
+  gettimeofday(&tv_end, NULL);
+
+  copy_from_device(res, ci->remote_res, new_width * new_height * CHANNELS * sizeof(uchar));
+  copy_from_device(tmp1c, ci->remote_edges, new_width * new_height * sizeof(uchar));
+
+  gettimeofday(&tv_transfer, NULL);
+  tot_transfer += get_time(tv_end, tv_transfer);
+
+  // int pos = 0;
+  // for (int i = 0; i < new_height; i++) {
+  //   for (int j = 0; j < new_width; j++) {
+  //     pos += tmp1c[i * new_width + j];
+  //   }
+  // }
+  // tot_skip += pos;
+
+  tot_all += get_time(tv_res, tv_end);
+  tot_res += get_time(tv_res, tv_lum);
+  tot_lum += get_time(tv_lum, tv_gaus_diff);
+  tot_gaus_diff += get_time(tv_gaus_diff, tv_blur);
+  tot_blur += get_time(tv_blur, tv_sobel);
+  tot_sobel += get_time(tv_sobel, tv_refine);
+  tot_refine += get_time(tv_refine, tv_end);
+}
+
 
 int main(int argc, char** argv) {
   if (argc != 4) {
@@ -42,150 +153,84 @@ int main(int argc, char** argv) {
   }
 
   uchar *original;
+  char* input =  (char*) malloc(22*sizeof(char));
+  char* output = (char*) malloc(23*sizeof(char));
   unsigned int width, height;
+  
+  // Set timestamps to 0.
+  tot_res = tot_all = tot_lum = tot_blur = tot_sobel = tot_refine = tot_end = tot_gaus_diff = 0;
 
-  unsigned int err = loadbmp_decode_file(argv[2], &original, &width, &height, LOADBMP_RGB);
-  if (err) {
-    printf("Could not open or find the image\n");
-    return 1;
-  }
+  // Set skip coutner to 0
+  tot_skip = 0;
 
-  int new_width = floor(scale * width);
-  int new_height = floor(scale * height);
-  int channels = 3; // BMP always has 3 channels (r, g, b)
-  void* tmp;
+  struct timeval complete_start, complete_end;
+  struct timeval transfer_start, transfer_end;
+  gettimeofday(&complete_start, NULL);
 
-  // Two arrays to store the resulting image and the bitmask (to count skipped pixels)
-  uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
-  uchar* tmp1c = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
+  int new_width, new_height;
+  int start_idx = 1;
+  int end_idx = 100;
 
-#ifndef USE_CUDA
-  uchar* tmpnc = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
+  uchar* res;
+  uchar* tmp1c;
+  struct cuda_images ci;
+  for (int image_idx = start_idx; image_idx < end_idx; image_idx++) {
+    sprintf(input, "input/images/%03d.bmp", image_idx);
+    sprintf(output, "output/images/%03d.bmp", image_idx);
+  
+    unsigned int err = loadbmp_decode_file(input, &original, &width, &height, LOADBMP_RGB);
+    if (err) {
+      printf("Could not open or find the image\n");
+      return 1;
+    }
+    if (image_idx == 1) {
+      new_width = floor(scale * width);
+      new_height = floor(scale * height);
+      res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * CHANNELS);
+      tmp1c = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
+    
+      init_cuda_images(&ci, new_width, new_height);
+    }
 
-  uchar* upscaled = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
-  uchar* blurred = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
-  uchar* lum = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
-  uchar* med = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
-  uchar* sob = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
-  uchar* grad = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
-#endif
-  /*
-   * GPU Allocations and memcpys
-   */
+    gettimeofday(&transfer_start, NULL);
+    copy_to_device((&ci)->remote_original, original, width * height * CHANNELS * sizeof(uchar));
+    gettimeofday(&transfer_end, NULL);
+    tot_transfer += get_time(transfer_start, transfer_end);
+
+    // Two arrays to store the resulting image and the bitmask (to count skipped pixels)
 
 #ifdef USE_CUDA
-  uchar* remote_lum;
-  uchar* remote_grad;
-  uchar* remote_res;
-  uchar* remote_tmpnc;
-  uchar* remote_tmp1c;
-  uchar* remote_blurred;
-  uchar* remote_original;
-  uchar* remote_lum_sharp;
-  uchar* remote_edges;
-  uchar* remote_bitmask;
-
-  create_device_image((void**) &remote_original,  new_width * new_height * channels * sizeof(uchar));
-  create_device_image((void**) &remote_blurred,   new_width * new_height * channels * sizeof(uchar));
-  create_device_image((void**) &remote_lum,       new_width * new_height * sizeof(uchar));
-  create_device_image((void**) &remote_grad,      new_width * new_height * sizeof(uchar));
-
-  // Data required for possible bitmask optimization.
-  create_device_image((void**) &remote_lum_sharp, new_width * new_height * sizeof(uchar));
-  create_device_image((void**) &remote_edges,     new_width * new_height * sizeof(uchar));
-  create_device_image((void**) &remote_bitmask,   new_width * new_height * sizeof(uchar));
-  create_device_image((void**) &remote_tmp1c,     new_width * new_height * sizeof(uchar));
-  create_device_image((void**) &remote_res,       new_width * new_height * channels * sizeof(uchar));
-  create_device_image((void**) &remote_tmpnc,     new_width * new_height * channels * sizeof(uchar));
-
-  copy_to_device(remote_original, original, width * height * channels * sizeof(uchar));
+    process_image_cuda(&ci, original, res, tmp1c, width, height, scale);
+#else
+    printf("Not yet implemented...\n");
 #endif
 
-  printf("Creating image of %dx%d\n", new_width, new_height);
+    err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
+    if (err) {
+      printf("Error during saving file to %s\n", output);
+    }
 
-  struct timeval tv_res, tv_med, tv_lum, tv_blur, tv_sobel, tv_refine, tv_end;
-  struct timeval tv_gaus_diff;
-  
-  gettimeofday(&tv_res, NULL);
-  resize_kernel(remote_original, width, height, channels, scale, remote_res);
-
-  gettimeofday(&tv_lum, NULL);
-  luminance_kernel(remote_res, new_width, new_height, channels, remote_lum_sharp);
-
-  gettimeofday(&tv_gaus_diff, NULL);
-  gaussian_diff_edge_kernel(remote_lum_sharp, new_width, new_height, remote_edges, remote_lum, GAUSS_ITERS, THRESHOLD_VAL);
-
-  for (int i = 0; i < BITMASK_DILATE; i++) {
-    dilate_kernel(remote_edges, new_width, new_height, remote_tmp1c);
-
-    tmp = remote_edges;
-    remote_edges = remote_tmp1c;
-    remote_tmp1c = (uchar*) tmp;
-  }
-
-  gettimeofday(&tv_blur , NULL);
-  for (int i = 0; i < UNBLUR_ITER; i++) {
-    push_grad_kernel(remote_lum, new_width, new_height, remote_tmp1c, remote_edges);
-
-    tmp = remote_lum;
-    remote_lum = remote_tmp1c;
-    remote_tmp1c = (uchar*) tmp;
-  }
-
-  gettimeofday(&tv_sobel, NULL);
-
-  sobel_kernel(remote_lum, new_width, new_height, remote_grad);
-
-  gettimeofday(&tv_refine, NULL);
-  for (int i = 0; i < REFINE_ITER; i++) {
-    push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels, remote_edges);
-
-    tmp = remote_res;
-    remote_res = remote_tmpnc;
-    remote_tmpnc = (uchar*) tmp;
-
-    // push_grad(grad, new_width, new_height, tmp1c);
-
-    tmp = remote_grad;
-    remote_grad = remote_tmp1c;
-    remote_tmp1c = (uchar*) tmp;
-  }
-  
-  gettimeofday(&tv_end, NULL);
-  
-  copy_from_device(res, remote_res, new_width * new_height * channels * sizeof(uchar));
-  copy_from_device(tmp1c, remote_edges, new_width * new_height * sizeof(uchar));
-
-  err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
-  if (err) {
-    printf("Error during saving file to %s\n", argv[3]);
-  }
-
-  int pos = 0;
-  for (int i = 0; i < new_height; i++) {
-    for (int j = 0; j < new_width; j++) {
-      pos += tmp1c[i * new_width + j];
+    if (image_idx == end_idx - 1) {
+      free(res);
+      free(tmp1c);
     }
   }
-  int size = new_width * new_height;
-  printf("%d/%d pixels (%.2f percent skipped)\n", pos, size, (((size - pos)) / (float)size) * 100.0);
+  
+  gettimeofday(&complete_end, NULL);
 
-#ifndef USE_CUDA
-  free(upscaled);
-  free(lum);
-  free(med);
-  free(sob);
-#endif
-  free(res);
+  printf("Overall Time: %.2f\n", get_time(complete_start, complete_end));
+  printf("Transfer Time: %.2f\n", tot_transfer);
+  printf("---------------\nAlgorithm Stats\n------------------\n");
+  int size = new_width * new_height * (end_idx - start_idx);
+  printf("%lld/%d pixels (%.2f percent skipped)\n", tot_skip, size, (((size - tot_skip)) / (float)size) * 100.0);
 
-  printf("Total compute time: %.5f\n", get_time(tv_res, tv_end));
-  printf("  Resizing:   %.5f\n", get_time(tv_res, tv_med));
-  printf("  Blurring:   %.5f\n", get_time(tv_med, tv_lum));
-  printf("  Luminance:  %.5f\n", get_time(tv_lum, tv_gaus_diff));
-  printf("  Gauss + Edge:  %.5f\n", get_time(tv_gaus_diff, tv_blur));
-  printf("  Unblurring: %.5f\n", get_time(tv_blur, tv_sobel));
-  printf("  Sobel:      %.5f\n", get_time(tv_sobel, tv_refine));
-  printf("  Refining:   %.5f\n", get_time(tv_refine, tv_end));
+  printf("Total Time:   %.5f\n", tot_all);
+  printf("  Resizing:   %.5f\n", tot_res);
+  printf("  Luminance:  %.5f\n", tot_lum);
+  printf("  Gauss + Edge:  %.5f\n", tot_gaus_diff);
+  printf("  Unblurring: %.5f\n", tot_blur);
+  printf("  Sobel:      %.5f\n", tot_sobel);
+  printf("  Refining:   %.5f\n", tot_refine);
 
   return 0;
 }
