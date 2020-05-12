@@ -252,8 +252,6 @@ __global__ void cu_dilate(uchar* in, int width, int height, uchar* out) {
     }
 
     out[i * width + j] = 0;
-
-    // out[i * width + j] = 0;
 }
 
 __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
@@ -523,6 +521,10 @@ void create_device_image(void** ptr, int size) {
     checkCudaCall(cudaMalloc(ptr, size));
     if (ptr == NULL) { printf("Error while allocating image of size %d.\n", size); exit(1); }
 }   
+
+void free_device_image(void* ptr) {
+    checkCudaCall(cudaFree(ptr));
+}
 
 void copy_to_device(void* device, void* host, int size) {
     checkCudaCall(cudaMemcpy(device, host, size, cudaMemcpyHostToDevice));

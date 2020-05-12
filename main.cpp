@@ -15,7 +15,7 @@
 #define RGB_STRENGTH 0.5
 #define UNBLUR_ITER 3
 #define REFINE_ITER 5
-#define BITMASK_DILATE 3
+#define BITMASK_DILATE 4
 #define GAUSS_ITERS 3
 #define THRESHOLD_VAL 1
 
@@ -57,9 +57,26 @@ void init_cuda_images(struct cuda_images* ci, int new_width, int new_height) {
   create_device_image((void**) &ci->remote_lum_sharp, new_width * new_height * sizeof(uchar));
   create_device_image((void**) &ci->remote_edges,     new_width * new_height * sizeof(uchar));
   create_device_image((void**) &ci->remote_bitmask,   new_width * new_height * sizeof(uchar));
+
   create_device_image((void**) &ci->remote_tmp1c,     new_width * new_height * sizeof(uchar));
   create_device_image((void**) &ci->remote_res,       new_width * new_height * CHANNELS * sizeof(uchar));
   create_device_image((void**) &ci->remote_tmpnc,     new_width * new_height * CHANNELS * sizeof(uchar));
+}
+
+void free_cuda_images(struct cuda_images* ci) {
+  free_device_image((void*) ci->remote_original);
+  free_device_image((void*) ci->remote_blurred);
+  free_device_image((void*) ci->remote_lum);
+  free_device_image((void*) ci->remote_grad);
+
+  // Bitmask optimization free
+  free_device_image((void*) ci->remote_lum_sharp);
+  free_device_image((void*) ci->remote_edges);
+  free_device_image((void*) ci->remote_bitmask);
+
+  free_device_image((void*) ci->remote_tmp1c);
+  free_device_image((void*) ci->remote_res);
+  free_device_image((void*) ci->remote_tmpnc);
 }
 
 void process_image_cuda(struct cuda_images* ci, uchar* original, uchar* res, uchar* tmp1c, int width, int height, int scale) {
@@ -123,13 +140,15 @@ void process_image_cuda(struct cuda_images* ci, uchar* original, uchar* res, uch
   gettimeofday(&tv_transfer, NULL);
   tot_transfer += get_time(tv_end, tv_transfer);
 
-  // int pos = 0;
-  // for (int i = 0; i < new_height; i++) {
-  //   for (int j = 0; j < new_width; j++) {
-  //     pos += tmp1c[i * new_width + j];
-  //   }
-  // }
-  // tot_skip += pos;
+  int pos = 0;
+  for (int i = 0; i < new_height; i++) {
+    for (int j = 0; j < new_width; j++) {
+      if (tmp1c[i * new_width + j] != 0 && tmp1c[i * new_width + j] != 1)
+        printf("%d\n", tmp1c[i * new_width + j]);
+      pos += (tmp1c[i * new_width + j] != 0);
+    }
+  }
+  tot_skip += pos;
 
   tot_all += get_time(tv_res, tv_end);
   tot_res += get_time(tv_res, tv_lum);
@@ -194,6 +213,8 @@ int main(int argc, char** argv) {
 
     gettimeofday(&transfer_start, NULL);
     copy_to_device((&ci)->remote_original, original, width * height * CHANNELS * sizeof(uchar));
+    // We dont need the original after its copied over.
+    free(original);
     gettimeofday(&transfer_end, NULL);
     tot_transfer += get_time(transfer_start, transfer_end);
 
@@ -205,14 +226,15 @@ int main(int argc, char** argv) {
     printf("Not yet implemented...\n");
 #endif
 
-    err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
-    if (err) {
-      printf("Error during saving file to %s\n", output);
-    }
+    // err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
+    // if (err) {
+    //   printf("Error during saving file to %s\n", output);
+    // }
 
     if (image_idx == end_idx - 1) {
       free(res);
       free(tmp1c);
+      free_cuda_images(&ci);
     }
   }
   

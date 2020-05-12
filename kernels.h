@@ -12,6 +12,7 @@ extern "C" {
 
 #ifdef USE_CUDA
 void create_device_image(void** ptr, int size);
+void free_device_image(void* ptr);
 
 void copy_to_device(void* host, void* device, int size);
 void copy_from_device(void* device, void* host, int size);
