@@ -6,6 +6,7 @@
 #define uchar unsigned char
 #define RGB_STRENGTH 0.5
 #define BITMASK_RADIUS 5
+#define GRADIENT_THRESHOLD 64
 
 const int threadBlockWidth  = 16;
 const int threadBlockHeight = 16;
@@ -319,90 +320,62 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     uchar gl = grad[l];
     uchar gr = grad[r];
 
-    uchar min, max;
+    int mag_x = (int) gtr + 2 * (int) gr + (int) gbr - (int) gtl - 2 * (int) gl - (int) gbl;
+    int mag_y = (int) gbl + 2 * (int) gb + (int) gbr - (int) gtl - 2 * (int) gt - (int) gtr;
 
-    // vertical push top -> bottom
-    min = cu_min3(gtl, gt, gtr);
-    max = cu_max3(gbl, gb, gbr);
+    int sign_mag_x = mag_x >> 31;
+    int sign_mag_y = mag_y >> 31;
 
-    if (min > max) {
-        cu_blendc(data, channels, out, c, tl, t, tr);
-        out_grad[c] = cu_blend(gc, gtl, gt, gtr);
-        return;
-    }
+    int sign_thresh_mag_x = (abs(mag_x) - GRADIENT_THRESHOLD) >> 31;
+    int sign_thresh_mag_y = (abs(mag_y) - GRADIENT_THRESHOLD) >> 31;
 
-    // vertical push bottom -> top
-    min = cu_min3(gbl, gb, gbr);
-    max = cu_max3(gtl, gt, gtr);
+    int quadrant = sign_mag_x;
+    quadrant = quadrant << 1 + sign_thresh_mag_x;
+    quadrant = quadrant << 1 + sign_mag_y;
+    quadrant = quadrant << 1 + sign_thresh_mag_y;
 
-    if (min > max) {
-        cu_blendc(data, channels, out, c, bl, b, br);
-        out_grad[c] = cu_blend(gc, gbl, gb, gbr);
-        return;
-    }
-
-    // horizontal push left -> right
-    min = cu_min3(gtl, gl, gbl);
-    max = cu_max3(gtr, gr, gbr);
-
-    if (min > max) {
-        cu_blendc(data, channels, out, c, tl, l, bl);
-        out_grad[c] = cu_blend(gc, gtl, gl, gbl);
-        return;
-    }
-
-    // horizontal push right -> left
-    min = cu_min3(gtr, gr, gbr);
-    max = cu_max3(gtl, gl, gbl);
-
-    if (min > max) {
-        cu_blendc(data, channels, out, c, tr, r, br);
-        out_grad[c] = cu_blend(gc, gtr, gr, gbr);
-        return;
-    }
-
-    // diagonal push top right -> bottom left
-    min = cu_min3(gt, gc, gr);
-    max = cu_max3(gl, gbl, gb);
-
-    if (min > gc && gc > max) {
-        cu_blendc(data, channels, out, c, t, tr, r);
-        out_grad[c] = cu_blend(gc, gt, gtr, gr);
-        return;
-    }
-
-    // diagonal push bottom left -> top right
-    min = cu_min3(gb, gc, gl);
-    max = cu_max3(gr, gtr, gt);
-
-    if (min > gc && gc > max) {
-        cu_blendc(data, channels, out, c, b, bl, l);
-        out_grad[c] = cu_blend(gc, gb, gbl, gl);
-        return;
-    }
-
-    // diagonal push top left -> bottom right
-    min = cu_min3(gt, gc, gl);
-    max = cu_max3(gr, gbr, gb);
-
-    if (min > gc && gc > max) {
-        cu_blendc(data, channels, out, c, t, tl, l);
-        out_grad[c] = cu_blend(gc, gt, gtl, gl);
-        return;
-    }
-
-    // diagonal push bottom right -> top left
-    min = cu_min3(gb, gc, gr);
-    max = cu_max3(gl, gtl, gt);
-
-    if (min > gc && gc > max) {
+    switch (quadrant) {
+    case 10: // diagonal push bottom right -> top left
         cu_blendc(data, channels, out, c, b, br, r);
         out_grad[c] = cu_blend(gc, gb, gbr, gr);
-        return;
+        break;
+    case 14: // vertical push bottom -> top
+    case 6:
+        cu_blendc(data, channels, out, c, bl, b, br);
+        out_grad[c] = cu_blend(gc, gbl, gb, gbr);
+        break;
+    case 2: // diagonal push bottom left -> top right
+        cu_blendc(data, channels, out, c, b, bl, l);
+        out_grad[c] = cu_blend(gc, gb, gbl, gl);
+        break;
+    case 11: // horizontal push right -> left
+    case 9:
+        cu_blendc(data, channels, out, c, tr, r, br);
+        out_grad[c] = cu_blend(gc, gtr, gr, gbr);
+        break;
+    case 3: // horizontal push left -> right
+    case 1:
+        cu_blendc(data, channels, out, c, tl, l, bl);
+        out_grad[c] = cu_blend(gc, gtl, gl, gbl);
+        break;
+    case 8: // diagonal push top right -> bottom left
+        cu_blendc(data, channels, out, c, t, tr, r);
+        out_grad[c] = cu_blend(gc, gt, gtr, gr);
+        break;
+    case 12: // vertical push top -> bottom
+    case 14:
+        cu_blendc(data, channels, out, c, tl, t, tr);
+        out_grad[c] = cu_blend(gc, gtl, gt, gtr);
+        break;
+    case 0: // diagonal push top left -> bottom right
+        cu_blendc(data, channels, out, c, t, tl, l);
+        out_grad[c] = cu_blend(gc, gt, gtl, gl);
+        break;
+    default:
+        cu_copyc(data, channels, out, c);
+        out_grad[c] = grad[c];
+        break;
     }
-
-    cu_copyc(data, channels, out, c);
-    out_grad[c] = grad[c];
 }
 
 __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar* bitmask) {
