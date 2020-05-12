@@ -53,9 +53,13 @@ int main(int argc, char** argv) {
   int new_width = floor(scale * width);
   int new_height = floor(scale * height);
   int channels = 3; // BMP always has 3 channels (r, g, b)
-
   void* tmp;
+
+  // Two arrays to store the resulting image and the bitmask (to count skipped pixels)
+  uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
   uchar* tmp1c = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
+
+#ifndef USE_CUDA
   uchar* tmpnc = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
 
   uchar* upscaled = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
@@ -64,12 +68,12 @@ int main(int argc, char** argv) {
   uchar* med = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
   uchar* sob = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
   uchar* grad = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
-  uchar* res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * channels);
-
+#endif
   /*
    * GPU Allocations and memcpys
    */
 
+#ifdef USE_CUDA
   uchar* remote_lum;
   uchar* remote_grad;
   uchar* remote_res;
@@ -82,8 +86,7 @@ int main(int argc, char** argv) {
   uchar* remote_bitmask;
 
   create_device_image((void**) &remote_original,  new_width * new_height * channels * sizeof(uchar));
-  create_device_image((void**) &remote_blurred,  new_width * new_height * channels * sizeof(uchar));
-
+  create_device_image((void**) &remote_blurred,   new_width * new_height * channels * sizeof(uchar));
   create_device_image((void**) &remote_lum,       new_width * new_height * sizeof(uchar));
   create_device_image((void**) &remote_grad,      new_width * new_height * sizeof(uchar));
 
@@ -91,13 +94,12 @@ int main(int argc, char** argv) {
   create_device_image((void**) &remote_lum_sharp, new_width * new_height * sizeof(uchar));
   create_device_image((void**) &remote_edges,     new_width * new_height * sizeof(uchar));
   create_device_image((void**) &remote_bitmask,   new_width * new_height * sizeof(uchar));
-
-  create_device_image((void**) &remote_tmp1c,  new_width * new_height * sizeof(uchar));
-  
-  create_device_image((void**) &remote_res,    new_width * new_height * channels * sizeof(uchar));
-  create_device_image((void**) &remote_tmpnc,  new_width * new_height * channels * sizeof(uchar));
+  create_device_image((void**) &remote_tmp1c,     new_width * new_height * sizeof(uchar));
+  create_device_image((void**) &remote_res,       new_width * new_height * channels * sizeof(uchar));
+  create_device_image((void**) &remote_tmpnc,     new_width * new_height * channels * sizeof(uchar));
 
   copy_to_device(remote_original, original, width * height * channels * sizeof(uchar));
+#endif
 
   printf("Creating image of %dx%d\n", new_width, new_height);
 
@@ -107,12 +109,7 @@ int main(int argc, char** argv) {
   gettimeofday(&tv_res, NULL);
   resize_kernel(remote_original, width, height, channels, scale, remote_res);
 
-  gettimeofday(&tv_med, NULL);
-  // gaussian3_kernel(remote_res, new_width, new_height, remote_blurred);
-
-  // TODO: Optimize this to not do double luminance and double gaussian.
   gettimeofday(&tv_lum, NULL);
-  // luminance_kernel(remote_blurred, new_width, new_height, channels, remote_lum);
   luminance_kernel(remote_res, new_width, new_height, channels, remote_lum_sharp);
 
   gettimeofday(&tv_gaus_diff, NULL);
@@ -173,11 +170,12 @@ int main(int argc, char** argv) {
   int size = new_width * new_height;
   printf("%d/%d pixels (%.2f percent skipped)\n", pos, size, (((size - pos)) / (float)size) * 100.0);
 
-
+#ifndef USE_CUDA
   free(upscaled);
   free(lum);
   free(med);
   free(sob);
+#endif
   free(res);
 
   printf("Total compute time: %.5f\n", get_time(tv_res, tv_end));

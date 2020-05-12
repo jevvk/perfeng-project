@@ -9,12 +9,43 @@
 
 const int threadBlockWidth  = 16;
 const int threadBlockHeight = 16;
+const int sWidth = threadBlockWidth + 2;
+const int sHeight = threadBlockHeight + 2;
 
 static void checkCudaCall(cudaError_t result) {
     if (result != cudaSuccess) {
         printf("Error:: %s: %s\n", cudaGetErrorName(result), cudaGetErrorString(result));
         exit(1);
     }
+}
+
+
+__device__ void load_shared(uchar* in, uchar* shared_in, int width, int height) {
+    // Left top corner of the to be loaded data.
+    int dest  = threadIdx.y * threadBlockWidth + threadIdx.x;
+    int destY = dest / sWidth;     
+    int destX = dest % sWidth;		
+    int srcY  = blockIdx.y * threadBlockHeight + destY; 
+    int srcX  = blockIdx.x * threadBlockWidth + destX; 
+    int src   = srcY * width + srcX;  
+    
+    // Set pixel        
+    if (srcX < width && srcY < height) {
+        shared_in[dest] = in[src];
+    }
+
+    // Load the second batch of pixels if necessary
+    dest  = threadIdx.y * threadBlockWidth + threadIdx.x + (threadBlockWidth * threadBlockHeight);
+    destY = dest / sWidth;
+    destX = dest % sWidth;
+    srcY  = blockIdx.y * threadBlockHeight + destY;
+    srcX  = blockIdx.x * threadBlockWidth + destX;
+    src   = srcY * width + srcX;
+    if (destY < sHeight && srcY < height && srcX < width) {
+        shared_in[dest] = in[src];
+    }
+
+    __syncthreads();
 }
 
 __device__ void cu_copyc(uchar* in, int channels, uchar* out, int v) {
@@ -158,37 +189,9 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     
-    const int sWidth = threadBlockWidth + 2;
-    const int sHeight = threadBlockHeight + 2;
-
     // Load memory into shared memory
     __shared__ unsigned char shared_in[sWidth * sHeight];
-            
-    // Left top corner of the to be loaded data.
-    int dest  = threadIdx.y * threadBlockWidth + threadIdx.x;
-    int destY = dest / sWidth;     
-    int destX = dest % sWidth;		
-    int srcY  = blockIdx.y * threadBlockHeight + destY; 
-    int srcX  = blockIdx.x * threadBlockWidth + destX; 
-    int src   = srcY * width + srcX;  
-    
-    // Set pixel        
-    if (srcX < width && srcY < height) {
-        shared_in[dest] = in[src];
-    }
-
-    // Load the second batch of pixels if necessary
-    dest  = threadIdx.y * threadBlockWidth + threadIdx.x + (threadBlockWidth * threadBlockHeight);
-    destY = dest / sWidth;
-    destX = dest % sWidth;
-    srcY  = blockIdx.y * threadBlockHeight + destY;
-    srcX  = blockIdx.x * threadBlockWidth + destX;
-    src   = srcY * width + srcX;
-    if (destY < sHeight && srcY < height && srcX < width) {
-        shared_in[dest] = in[src];
-    }
-
-    __syncthreads();
+    load_shared(in, shared_in, width, height);
 
     if (x >= width - 2 || y >= height - 2) return;
     
@@ -199,7 +202,6 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     for (int ky = 0; ky < 3; ky++) {
         int tty = ty + ky;
         for (int kx = 0; kx < 3; kx++) {
-            // res += g[ky][kx] * in[(y + ky) * width + (x + kx)];
             res += g[ky][kx] * shared_in[tty * sWidth + (tx + kx)];
         }
     }
@@ -230,7 +232,7 @@ __global__ void cu_dilate(uchar* in, int width, int height, uchar* out) {
 
     if (i < BITMASK_RADIUS || i >= height - BITMASK_RADIUS || j < BITMASK_RADIUS || j >= width - BITMASK_RADIUS) return;
 
-    uchar kernel[3][3] = { {0, 1, 0}, {1, 1, 1}, {0, 1, 0} };
+    const uchar kernel[3][3] = { {0, 1, 0}, {1, 1, 1}, {0, 1, 0} };
 
     #pragma unroll
     for (int ii = 0; ii < 3; ii++) {
@@ -250,16 +252,6 @@ __global__ void cu_dilate(uchar* in, int width, int height, uchar* out) {
 
     out[i * width + j] = 0;
 
-
-    // for (int y = -BITMASK_RADIUS; y < BITMASK_RADIUS + 1; y++) {
-    //     int ii = i + y;
-    //     for (int x = -BITMASK_RADIUS; x < BITMASK_RADIUS + 1; x++) {
-    //         int jj = j + x;
-    //         if (in[ii * width + jj] == 1) {
-    //             out[ii * width + jj]) = 1;
-    //         }
-    //     }
-    // }
     // out[i * width + j] = 0;
 }
 
@@ -267,21 +259,24 @@ __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
-    float kx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
-    float ky[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
-  
-    if (i < width - 1 && j < height - 1 && i > 0 && j > 0) {
-        float mag_x = 0;
-        float mag_y = 0;
+    // __shared__ unsigned char shared_in[sWidth * sHeight];
+    // load_shared(in, shared_in, width, height);
 
-        for (int ki = 0; ki < 3; ki++) {
-            for (int kj = 0; kj < 3; kj++) {
-                mag_x += kx[ki][kj] * in[(i + ki - 1) * width + j + kj - 1];
-                mag_y += ky[ki][kj] * in[(i + ki - 1) * width + j + kj - 1];
+    const char sx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    const char sy[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+  
+    if (i < width - 2 && j < height - 2) {
+        int mag_x = 0;
+        int mag_y = 0;
+
+        for (int ky = 0; ky < 3; ky++) {
+            for (int kx = 0; kx < 3; kx++) {
+                mag_x += sx[ky][kx] * in[(i + ky) * width + j + kx];
+                mag_y += sy[ky][kx] * in[(i + ky) * width + j + kx];
             }
         }
     
-        out[i * width + j] = 255.0 - cu_clamp(sqrt(mag_x * mag_x + mag_y * mag_y), 0, 255.0);
+        out[i * width + j] = 255.0 - cu_clamp(sqrt((float) (mag_x * mag_x + mag_y * mag_y)), 0, 255.0);
       
     }
 }
