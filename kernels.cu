@@ -20,7 +20,6 @@ static void checkCudaCall(cudaError_t result) {
     }
 }
 
-
 __device__ void load_shared(uchar* in, uchar* shared_in, int width, int height) {
     // Left top corner of the to be loaded data.
     int dest  = threadIdx.y * threadBlockWidth + threadIdx.x;

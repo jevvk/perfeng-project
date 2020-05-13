@@ -172,8 +172,8 @@ int main(int argc, char** argv) {
   }
 
   uchar *original;
-  char* input =  (char*) malloc(22*sizeof(char));
-  char* output = (char*) malloc(23*sizeof(char));
+  char* input =  (char*) malloc(50*sizeof(char));
+  char* output = (char*) malloc(50*sizeof(char));
   unsigned int width, height;
   
   // Set timestamps to 0.
@@ -188,11 +188,11 @@ int main(int argc, char** argv) {
 
   int new_width, new_height;
   int start_idx = 1;
-  int end_idx = 100;
+  int end_idx = 10;
 
   uchar* res;
   uchar* tmp1c;
-  struct cuda_images ci;
+  struct cuda_images* ci = (struct cuda_images*) malloc(sizeof(struct cuda_images));
   for (int image_idx = start_idx; image_idx < end_idx; image_idx++) {
     sprintf(input, "input/images/%03d.bmp", image_idx);
     sprintf(output, "output/images/%03d.bmp", image_idx);
@@ -208,11 +208,11 @@ int main(int argc, char** argv) {
       res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * CHANNELS);
       tmp1c = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
     
-      init_cuda_images(&ci, new_width, new_height);
+      init_cuda_images(ci, new_width, new_height);
     }
 
     gettimeofday(&transfer_start, NULL);
-    copy_to_device((&ci)->remote_original, original, width * height * CHANNELS * sizeof(uchar));
+    copy_to_device(ci->remote_original, original, width * height * CHANNELS * sizeof(uchar));
     // We dont need the original after its copied over.
     free(original);
     gettimeofday(&transfer_end, NULL);
@@ -221,20 +221,20 @@ int main(int argc, char** argv) {
     // Two arrays to store the resulting image and the bitmask (to count skipped pixels)
 
 #ifdef USE_CUDA
-    process_image_cuda(&ci, original, res, tmp1c, width, height, scale);
+    process_image_cuda(ci, original, res, tmp1c, width, height, scale);
 #else
     printf("Not yet implemented...\n");
 #endif
 
-    // err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
-    // if (err) {
-    //   printf("Error during saving file to %s\n", output);
-    // }
+    err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
+    if (err) {
+      printf("Error during saving file to %s\n", output);
+    }
 
     if (image_idx == end_idx - 1) {
       free(res);
       free(tmp1c);
-      free_cuda_images(&ci);
+      free_cuda_images(ci);
     }
   }
   
