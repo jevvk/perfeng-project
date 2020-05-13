@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
 
   int new_width, new_height;
   int start_idx = 1;
-  int end_idx = 10;
+  int end_idx = 101;
 
   uchar* res;
   uchar* tmp1c;
@@ -197,6 +197,8 @@ int main(int argc, char** argv) {
     sprintf(input, "input/images/%03d.bmp", image_idx);
     sprintf(output, "output/images/%03d.bmp", image_idx);
   
+    printf("Processing %s\n", input);
+
     unsigned int err = loadbmp_decode_file(input, &original, &width, &height, LOADBMP_RGB);
     if (err) {
       printf("Could not open or find the image\n");
@@ -226,7 +228,7 @@ int main(int argc, char** argv) {
     printf("Not yet implemented...\n");
 #endif
 
-    err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
+    // err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
     if (err) {
       printf("Error during saving file to %s\n", output);
     }
