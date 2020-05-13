@@ -157,6 +157,17 @@ __global__ void cu_resize(uchar* in, int width, int height, int channels, float 
 }
 
 
+__global__ void cu_diff_bitmask(uchar* in, uchar* in_prev, int width, int height, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i > height - 1 || j > width - 1) return;
+    int idx = i * width + j;
+
+    out[idx] = in[idx] == in_prev[idx];
+}   
+
+
 /*
  * Gaussian3 kernel does smoothing on all three colour channels.
  */
@@ -186,7 +197,7 @@ __global__ void cu_gaussian3(uchar* in, int width, int height, uchar* out) {
  * It then computes the difference between the input image and the smoothed pixel.
  * This gives us an edge image normalized to range 0-255
  */
-__global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
+__global__ void cu_gaussian_bitmask(uchar* in, uchar* bitmask, int width, int height, uchar* out) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     
@@ -195,6 +206,9 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     load_shared(in, shared_in, width, height);
 
     if (x >= width - 2 || y >= height - 2) return;
+    
+    // If two images are equal.
+    if (bitmask[y * width + x]) return;
     
     float res = 0;
     const int tx = threadIdx.x;
@@ -208,7 +222,40 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     }
 
     out[(y + 1) * width + (x + 1)] = res;
+}
+
+__global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
     
+    // Load memory into shared memory
+    __shared__ unsigned char shared_in[sWidth * sHeight];
+    load_shared(in, shared_in, width, height);
+
+    if (x >= width - 2 || y >= height - 2) return;
+        
+    float res = 0;
+    const int tx = threadIdx.x;
+    const int ty = threadIdx.y;
+
+    for (int ky = 0; ky < 3; ky++) {
+        int tty = ty + ky;
+        for (int kx = 0; kx < 3; kx++) {
+            res += g[ky][kx] * shared_in[tty * sWidth + (tx + kx)];
+        }
+    }
+
+    out[(y + 1) * width + (x + 1)] = res;
+}
+
+__global__ void cu_diff_edge_thresh_bitmask(uchar* in, uchar* bitmask, uchar* in_smooth, int width, int height, int threshold, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i >= height || j >= width) return;    
+
+    uchar res = abs(in[i * width + j] - in_smooth[i * width + j]);
+    out[i * width + j] = res > threshold ? bitmask[i * width + j] : 0;
 }
 
 __global__ void cu_diff_edge_thresh(uchar* in, uchar* in_smooth, int width, int height, int threshold, uchar* out) {
@@ -513,7 +560,8 @@ __global__ void copy_all(uchar* img, int width, int height, uchar* out) {
 
     if (i >= height || j >= width) return;
 
-    out[i * width + j] = img[i * width + j];
+    int idx = i * width + j;
+    out[idx] = img[idx];
 }
 
 
@@ -565,7 +613,7 @@ void gaussian3_kernel(uchar* in, int width, int height, uchar* out) {
     checkCudaCall(cudaGetLastError());
 }
 
-void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uchar* worker_arr, int n_iter, int threshold) {
+void gaussian_diff_edge_kernel(uchar* in, uchar* in_bitmask, int width, int height, uchar* out, uchar* worker_arr, int n_iter, int threshold) {
     uchar* orig_in = in;
     uchar* orig_out = out;
     
@@ -576,7 +624,10 @@ void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uch
     copy_all<<<grid, block>>>(in, width, height, worker_arr);
     
     for (int i = 0; i < n_iter; i++) {
-        cu_gaussian<<<grid, block>>>(worker_arr, width, height, out);
+        if (in_bitmask == NULL)
+            cu_gaussian<<<grid, block>>>(worker_arr, width, height, out);
+        else
+            cu_gaussian_bitmask<<<grid, block>>>(worker_arr, in_bitmask, width, height, out);
         cudaDeviceSynchronize();
         checkCudaCall(cudaGetLastError());
         
@@ -591,7 +642,11 @@ void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uch
         worker_arr = tmp;
     }
 
-    cu_diff_edge_thresh<<<grid, block>>>(orig_in, worker_arr, width, height, threshold, orig_out);
+    if (in_bitmask == NULL)
+        cu_diff_edge_thresh<<<grid, block>>>(orig_in, worker_arr, width, height, threshold, orig_out);
+    else
+        cu_diff_edge_thresh_bitmask<<<grid, block>>>(orig_in, in_bitmask, worker_arr, width, height, threshold, orig_out);
+
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }
@@ -668,6 +723,18 @@ void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int 
     cudaDeviceSynchronize();
 
     copy_vertical<<<height, 1>>>(out, width, height, channels);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+}
+
+void image_diff_bitmask_kernel(uchar* in, uchar* in_prev, int width, int height, uchar* out) {
+    // TODO: We dont need 2d coordinates here, it might be better to use flat coordinates.
+
+    // Split input into 16x16 (256 threads per grid)
+    dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
+    dim3 block(threadBlockWidth, threadBlockHeight);
+
+    cu_diff_bitmask<<<grid, block>>>(in, in_prev, width, height, out);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }

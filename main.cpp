@@ -22,6 +22,7 @@
 #define uchar unsigned char
 
 struct cuda_images {
+  int valid = 0;
   uchar* remote_lum;
   uchar* remote_grad;
   uchar* remote_res;
@@ -79,7 +80,7 @@ void free_cuda_images(struct cuda_images* ci) {
   free_device_image((void*) ci->remote_tmpnc);
 }
 
-void process_image_cuda(struct cuda_images* ci, uchar* original, uchar* res, uchar* tmp1c, int width, int height, int scale) {
+void process_image_cuda(struct cuda_images* ci, struct cuda_images* ci_prev, uchar* original, uchar* res, uchar* tmp1c, int width, int height, int scale) {
   void* tmp;
 
   int new_width = floor(scale * width);
@@ -93,8 +94,23 @@ void process_image_cuda(struct cuda_images* ci, uchar* original, uchar* res, uch
   gettimeofday(&tv_lum, NULL);
   luminance_kernel(ci->remote_res, new_width, new_height, CHANNELS, ci->remote_lum_sharp);
 
-  gettimeofday(&tv_gaus_diff, NULL);
-  gaussian_diff_edge_kernel(ci->remote_lum_sharp, new_width, new_height, ci->remote_edges, ci->remote_lum, GAUSS_ITERS, THRESHOLD_VAL);
+  if (ci_prev->valid) {
+    // Compare the previous image pixels with the current image pixels.
+    // Afterwards, copy over all unneeded pixels
+    image_diff_bitmask_kernel(ci->remote_lum_sharp, ci_prev->remote_lum_sharp, new_width, new_height, ci_prev->remote_bitmask);
+    for (int i = 0; i < BITMASK_DILATE; i++) {
+      dilate_kernel(ci_prev->remote_bitmask, new_width, new_height, ci_prev->remote_tmp1c);
+
+      tmp = ci_prev->remote_bitmask; ci_prev->remote_bitmask = ci_prev->remote_tmp1c; ci_prev->remote_tmp1c = (uchar*) tmp;
+    }
+
+    gettimeofday(&tv_gaus_diff, NULL);
+    gaussian_diff_edge_kernel(ci->remote_lum_sharp, ci_prev->remote_bitmask, new_width, new_height, ci->remote_edges, ci->remote_lum, GAUSS_ITERS, THRESHOLD_VAL);
+  } else {
+    gettimeofday(&tv_gaus_diff, NULL);
+    gaussian_diff_edge_kernel(ci->remote_lum_sharp, NULL, new_width, new_height, ci->remote_edges, ci->remote_lum, GAUSS_ITERS, THRESHOLD_VAL);
+  }
+
 
   for (int i = 0; i < BITMASK_DILATE; i++) {
     dilate_kernel(ci->remote_edges, new_width, new_height, ci->remote_tmp1c);
@@ -188,11 +204,15 @@ int main(int argc, char** argv) {
 
   int new_width, new_height;
   int start_idx = 1;
-  int end_idx = 100;
+  int end_idx = 30;
 
   uchar* res;
   uchar* tmp1c;
-  struct cuda_images ci;
+  
+  // Store images
+  struct cuda_images* ci = (struct cuda_images*) malloc(sizeof(struct cuda_images));
+  struct cuda_images* ci_prev = (struct cuda_images*) malloc(sizeof(struct cuda_images));
+
   for (int image_idx = start_idx; image_idx < end_idx; image_idx++) {
     sprintf(input, "input/images/%03d.bmp", image_idx);
     sprintf(output, "output/images/%03d.bmp", image_idx);
@@ -208,11 +228,13 @@ int main(int argc, char** argv) {
       res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * CHANNELS);
       tmp1c = (uchar*) malloc(sizeof(uchar) * new_width * new_height);
     
-      init_cuda_images(&ci, new_width, new_height);
+      init_cuda_images(ci, new_width, new_height);
+      init_cuda_images(ci_prev, new_width, new_height);
     }
+    ci->valid = 1;
 
     gettimeofday(&transfer_start, NULL);
-    copy_to_device((&ci)->remote_original, original, width * height * CHANNELS * sizeof(uchar));
+    copy_to_device(ci->remote_original, original, width * height * CHANNELS * sizeof(uchar));
     // We dont need the original after its copied over.
     free(original);
     gettimeofday(&transfer_end, NULL);
@@ -221,20 +243,25 @@ int main(int argc, char** argv) {
     // Two arrays to store the resulting image and the bitmask (to count skipped pixels)
 
 #ifdef USE_CUDA
-    process_image_cuda(&ci, original, res, tmp1c, width, height, scale);
+    process_image_cuda(ci, ci_prev, original, res, tmp1c, width, height, scale);
 #else
     printf("Not yet implemented...\n");
 #endif
 
-    // err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
-    // if (err) {
-    //   printf("Error during saving file to %s\n", output);
-    // }
+    err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
+    if (err) {
+      printf("Error during saving file to %s\n", output);
+    }
+
+    struct cuda_images* tmp = ci_prev;
+    ci_prev = ci;
+    ci = tmp;
 
     if (image_idx == end_idx - 1) {
       free(res);
       free(tmp1c);
-      free_cuda_images(&ci);
+      free_cuda_images(ci);
+      free_cuda_images(ci_prev);
     }
   }
   

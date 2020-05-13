@@ -10,7 +10,7 @@ OBJ_CUDA=$(patsubst %.cu,%.o,$(SRC_CUDA))
 CC=gcc
 NVCC=nvcc
 
-NVCCFLAGS=-O3
+NVCCFLAGS=-O3 -arch=sm_61
 
 comic-upscaler: main.cpp $(OBJ_CUDA)
 	$(NVCC) $(NVCCFLAGS) $(INCLUDES) $(LIBRARIES) $^ -o $@

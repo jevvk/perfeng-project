@@ -20,8 +20,10 @@ void copy_from_device(void* device, void* host, int size);
 void resize_kernel(uchar* in, int width, int height, int channels, float scale, uchar* out);
 void gaussian3_kernel(uchar* in, int width, int height, uchar* out);
 
+
 // Our additions.
-void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uchar* worker_arr, int n_iter, int threshold);
+void image_diff_bitmask_kernel(uchar* in, uchar* in_prev, int width, int height, uchar* out);
+void gaussian_diff_edge_kernel(uchar* in, uchar* in_bitmask, int width, int height, uchar* out, uchar* worker_arr, int n_iter, int threshold);
 void dilate_kernel(uchar* in, int width, int height, uchar* out);
 
 void luminance_kernel(uchar* in, int width, int height, int channels, uchar* out);
