@@ -49,9 +49,42 @@ __device__ void load_shared(uchar* in, uchar* shared_in, int width, int height) 
     __syncthreads();
 }
 
-__device__ void cu_copyc(uchar* in, int channels, uchar* out, int v) {
-    for (int i = 0; i < channels; i++) {
-        out[v * channels + i] = in[v * channels + i];
+__device__ void load_shared3(uchar* in, uchar* shared_in, int width, int height) {
+    // Left top corner of the to be loaded data.
+    int dest  = threadIdx.y * threadBlockWidth + threadIdx.x;
+    int destY = dest / sWidth;     
+    int destX = dest % sWidth;		
+    int srcY  = blockIdx.y * threadBlockHeight + destY; 
+    int srcX  = blockIdx.x * threadBlockWidth + destX; 
+    int src   = srcY * width + srcX;  
+    
+    // Set pixel        
+    if (srcX < width && srcY < height) {
+        shared_in[dest * 3] = in[src * 3];
+        shared_in[dest * 3 + 1] = in[src * 3 + 1];
+        shared_in[dest * 3 + 2] = in[src * 3 + 2];
+    }
+
+    // Load the second batch of pixels if necessary
+    dest  = threadIdx.y * threadBlockWidth + threadIdx.x + (threadBlockWidth * threadBlockHeight);
+    destY = dest / sWidth;
+    destX = dest % sWidth;
+    srcY  = blockIdx.y * threadBlockHeight + destY;
+    srcX  = blockIdx.x * threadBlockWidth + destX;
+    src   = srcY * width + srcX;
+    if (destY < sHeight && srcY < height && srcX < width) {
+        shared_in[dest * 3] = in[src * 3];
+        shared_in[dest * 3 + 1] = in[src * 3 + 1];
+        shared_in[dest * 3 + 2] = in[src * 3 + 2];
+    }
+
+    __syncthreads();
+}
+
+__device__ void cu_copyc(uchar* in, uchar* out, int out_v, int v) {
+    #pragma unroll
+    for (int i = 0; i < 3; i++) {
+        out[out_v * 3 + i] = in[v * 3 + i];
     }
 }
 
@@ -92,9 +125,10 @@ __device__ uchar cu_blend_lightest(uchar lightest, uchar base, uchar a, uchar b,
   }
   
 
-__device__ void cu_blendc(uchar* in, int channels, uchar* out, int base, int a, int b, int c) {
-    for (int i = 0; i < channels; i++) {
-        out[base * channels + i] = cu_blend(in[base * channels + i], in[a * channels + i], in[b * channels + i], in[c * channels + i]);
+__device__ void cu_blendc(uchar* in, uchar* out, int out_base, int base, int a, int b, int c) {
+    #pragma unroll
+    for (int i = 0; i < 3; i++) {
+        out[out_base * 3 + i] = cu_blend(in[base * 3 + i], in[a * 3 + i], in[b * 3 + i], in[c * 3 + i]);
     }
 }
 
@@ -281,44 +315,54 @@ __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
 }
 
 __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels, uchar* bitmask) {
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+
     int j = blockIdx.x * blockDim.x + threadIdx.x;
-    int i = blockIdx.y * blockDim.y + threadIdx.y;    
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    __shared__ unsigned char shared_data[sWidth * sHeight * 3];
+    __shared__ unsigned char shared_grad[sWidth * sHeight];
+
+    load_shared3(data, shared_data, width, height);
+    load_shared(grad, shared_grad, width, height);
     
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
     
     int c = i * width + j;
+    int s_c = (ty + 1) * sWidth + tx + 1;
 
     if (bitmask[c] == 0)  {
-        cu_copyc(data, channels, out, c);
-        out_grad[c] = grad[c];
+        cu_copyc(shared_data, out, c, s_c);
+        out_grad[c] = shared_grad[s_c];
         return;
     }
 
-    int tl = (i - 1) * width + (j - 1);
-    int tr = (i + 1) * width + (j - 1);
+    int s_tl = s_c - sWidth - 1;
+    int s_tr = s_c + sWidth + 1;
 
-    int bl = (i - 1) * width + (j + 1);
-    int br = (i + 1) * width + (j + 1);
+    int s_bl = s_c - sWidth + 1;
+    int s_br = s_c + sWidth + 1;
     
-    int t = i * width + (j - 1);
-    int b = i * width + (j + 1);
+    int s_t = s_c - 1;
+    int s_b = s_c + 1;
 
-    int l = (i - 1) * width + j;
-    int r = (i + 1) * width + j;
+    int s_l = s_c - sWidth;
+    int s_r = s_c + sWidth;
 
-    uchar gc = grad[c];
+    uchar gc = shared_grad[s_c];
 
-    uchar gtl = grad[tl];
-    uchar gtr = grad[tr];
+    uchar gtl = shared_grad[s_tl];
+    uchar gtr = shared_grad[s_tr];
 
-    uchar gbl = grad[bl];
-    uchar gbr = grad[br];
+    uchar gbl = shared_grad[s_bl];
+    uchar gbr = shared_grad[s_br];
 
-    uchar gt = grad[t];
-    uchar gb = grad[b];
+    uchar gt = shared_grad[s_t];
+    uchar gb = shared_grad[s_b];
 
-    uchar gl = grad[l];
-    uchar gr = grad[r];
+    uchar gl = shared_grad[s_l];
+    uchar gr = shared_grad[s_r];
 
     int mag_x = (int) gtr + 2 * (int) gr + (int) gbr - (int) gtl - 2 * (int) gl - (int) gbl;
     int mag_y = (int) gbl + 2 * (int) gb + (int) gbr - (int) gtl - 2 * (int) gt - (int) gtr;
@@ -336,44 +380,44 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
 
     switch (quadrant) {
     case 10: // diagonal push bottom right -> top left
-        cu_blendc(data, channels, out, c, b, br, r);
+        cu_blendc(shared_data, out, c, s_c, s_b, s_br, s_r);
         out_grad[c] = cu_blend(gc, gb, gbr, gr);
         break;
     case 14: // vertical push bottom -> top
     case 6:
-        cu_blendc(data, channels, out, c, bl, b, br);
+        cu_blendc(shared_data, out, c, s_c, s_bl, s_b, s_br);
         out_grad[c] = cu_blend(gc, gbl, gb, gbr);
         break;
     case 2: // diagonal push bottom left -> top right
-        cu_blendc(data, channels, out, c, b, bl, l);
+        cu_blendc(shared_data, out, c, s_c, s_b, s_bl, s_l);
         out_grad[c] = cu_blend(gc, gb, gbl, gl);
         break;
     case 11: // horizontal push right -> left
     case 9:
-        cu_blendc(data, channels, out, c, tr, r, br);
+        cu_blendc(shared_data, out, c, s_c, s_tr, s_r, s_br);
         out_grad[c] = cu_blend(gc, gtr, gr, gbr);
         break;
     case 3: // horizontal push left -> right
     case 1:
-        cu_blendc(data, channels, out, c, tl, l, bl);
+        cu_blendc(shared_data, out, c, s_c, s_tl, s_l, s_bl);
         out_grad[c] = cu_blend(gc, gtl, gl, gbl);
         break;
     case 8: // diagonal push top right -> bottom left
-        cu_blendc(data, channels, out, c, t, tr, r);
+        cu_blendc(shared_data, out, c, s_c, s_t, s_tr, s_r);
         out_grad[c] = cu_blend(gc, gt, gtr, gr);
         break;
     case 12: // vertical push top -> bottom
     case 4:
-        cu_blendc(data, channels, out, c, tl, t, tr);
+        cu_blendc(shared_data, out, c, s_c, s_tl, s_t, s_tr);
         out_grad[c] = cu_blend(gc, gtl, gt, gtr);
         break;
     case 0: // diagonal push top left -> bottom right
-        cu_blendc(data, channels, out, c, t, tl, l);
+        cu_blendc(shared_data, out, c, s_c, s_t, s_tl, s_l);
         out_grad[c] = cu_blend(gc, gt, gtl, gl);
         break;
     default:
-        cu_copyc(data, channels, out, c);
-        out_grad[c] = grad[c];
+        cu_copyc(shared_data, out, c, s_c);
+        out_grad[c] = shared_grad[s_c];
         break;
     }
 }
