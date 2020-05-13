@@ -25,6 +25,7 @@ void gaussian3_kernel(uchar* in, int width, int height, uchar* out);
 void image_diff_bitmask_kernel(uchar* in, uchar* in_prev, int width, int height, uchar* out);
 void gaussian_diff_edge_kernel(uchar* in, uchar* in_bitmask, int width, int height, uchar* out, uchar* worker_arr, int n_iter, int threshold);
 void dilate_kernel(uchar* in, int width, int height, uchar* out);
+void copy_bitmask_kernel(uchar* in, uchar* bitmask, int width, int height, uchar* out);
 
 void luminance_kernel(uchar* in, int width, int height, int channels, uchar* out);
 void push_grad_kernel(unsigned char* in, int width, int height, unsigned char* out, uchar* bitmask);

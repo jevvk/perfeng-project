@@ -98,10 +98,12 @@ void process_image_cuda(struct cuda_images* ci, struct cuda_images* ci_prev, uch
     // Compare the previous image pixels with the current image pixels.
     // Afterwards, copy over all unneeded pixels
     image_diff_bitmask_kernel(ci->remote_lum_sharp, ci_prev->remote_lum_sharp, new_width, new_height, ci_prev->remote_bitmask);
-    for (int i = 0; i < BITMASK_DILATE; i++) {
+    for (int i = 0; i < 4; i++) {
       dilate_kernel(ci_prev->remote_bitmask, new_width, new_height, ci_prev->remote_tmp1c);
 
-      tmp = ci_prev->remote_bitmask; ci_prev->remote_bitmask = ci_prev->remote_tmp1c; ci_prev->remote_tmp1c = (uchar*) tmp;
+      tmp = ci_prev->remote_bitmask; 
+      ci_prev->remote_bitmask = ci_prev->remote_tmp1c; 
+      ci_prev->remote_tmp1c = (uchar*) tmp;
     }
 
     gettimeofday(&tv_gaus_diff, NULL);
@@ -147,13 +149,27 @@ void process_image_cuda(struct cuda_images* ci, struct cuda_images* ci_prev, uch
     ci->remote_grad = ci->remote_tmp1c;
     ci->remote_tmp1c = (uchar*) tmp;
   }
-  
+
+  if (ci_prev->valid) {
+    // Copy the rest of the pixels in the output image.
+    copy_bitmask_kernel(ci_prev->remote_res, ci_prev->remote_bitmask, new_width, new_height, ci->remote_res);
+    copy_from_device(tmp1c, ci_prev->remote_bitmask, new_width * new_height * sizeof(uchar));
+
+    for (int i = 0; i < new_width * new_height * 3; i++) {
+      res[i] = tmp1c[i / 3] * 255;
+    }
+
+    loadbmp_encode_file("bitmask_test.bmp", res, new_width, new_height, LOADBMP_RGB);
+  }
+
   gettimeofday(&tv_end, NULL);
 
   copy_from_device(res, ci->remote_res, new_width * new_height * CHANNELS * sizeof(uchar));
   copy_from_device(tmp1c, ci->remote_edges, new_width * new_height * sizeof(uchar));
 
   gettimeofday(&tv_transfer, NULL);
+
+  // Compute stats for display at the end.
   tot_transfer += get_time(tv_end, tv_transfer);
 
   int pos = 0;
@@ -216,7 +232,9 @@ int main(int argc, char** argv) {
   for (int image_idx = start_idx; image_idx < end_idx; image_idx++) {
     sprintf(input, "input/images/%03d.bmp", image_idx);
     sprintf(output, "output/images/%03d.bmp", image_idx);
-  
+
+    printf("Processing %s\n", input);
+
     unsigned int err = loadbmp_decode_file(input, &original, &width, &height, LOADBMP_RGB);
     if (err) {
       printf("Could not open or find the image\n");

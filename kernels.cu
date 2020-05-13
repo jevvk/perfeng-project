@@ -164,8 +164,23 @@ __global__ void cu_diff_bitmask(uchar* in, uchar* in_prev, int width, int height
     if (i > height - 1 || j > width - 1) return;
     int idx = i * width + j;
 
-    out[idx] = in[idx] == in_prev[idx];
+    out[idx] = abs(in[idx] - in_prev[idx]) > 1;
 }   
+
+__global__ void cu_copy_bitmask(uchar* img, uchar* bitmask, int width, int height, uchar* out) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i >= height || j >= width) return;
+
+    int idx = i * width + j;
+    // This pixel is equal.
+    if (bitmask[idx] == 1) {
+        for (int c = 0; c < 3; c++) {
+            out[idx * 3 + c] = img[idx * 3 + c];
+        }
+    }
+}
 
 
 /*
@@ -206,9 +221,9 @@ __global__ void cu_gaussian_bitmask(uchar* in, uchar* bitmask, int width, int he
     load_shared(in, shared_in, width, height);
 
     if (x >= width - 2 || y >= height - 2) return;
-    
+
     // If two images are equal.
-    if (bitmask[y * width + x]) return;
+    if (!bitmask[y * width + x]) return;
     
     float res = 0;
     const int tx = threadIdx.x;
@@ -334,10 +349,10 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
     
     int c = i * width + j;
-
+    
     if (bitmask[c] == 0)  {
-        cu_copyc(data, channels, out, c);
         out_grad[c] = grad[c];
+        cu_copyc(data, channels, out, c);
         return;
     }
 
@@ -367,62 +382,90 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     uchar gl = grad[l];
     uchar gr = grad[r];
 
-    int mag_x = (int) gtr + 2 * (int) gr + (int) gbr - (int) gtl - 2 * (int) gl - (int) gbl;
-    int mag_y = (int) gbl + 2 * (int) gb + (int) gbr - (int) gtl - 2 * (int) gt - (int) gtr;
+    uchar min, max;
 
-    int sign_mag_x = mag_x >> 31;
-    int sign_mag_y = mag_y >> 31;
+    // vertical push top -> bottom
+    min = cu_min3(gtl, gt, gtr);
+    max = cu_max3(gbl, gb, gbr);
 
-    int sign_thresh_mag_x = (abs(mag_x) - GRADIENT_THRESHOLD) >> 31;
-    int sign_thresh_mag_y = (abs(mag_y) - GRADIENT_THRESHOLD) >> 31;
-
-    int quadrant = sign_mag_x;
-    quadrant = quadrant << 1 + sign_thresh_mag_x;
-    quadrant = quadrant << 1 + sign_mag_y;
-    quadrant = quadrant << 1 + sign_thresh_mag_y;
-
-    switch (quadrant) {
-    case 10: // diagonal push bottom right -> top left
-        cu_blendc(data, channels, out, c, b, br, r);
-        out_grad[c] = cu_blend(gc, gb, gbr, gr);
-        break;
-    case 14: // vertical push bottom -> top
-    case 6:
-        cu_blendc(data, channels, out, c, bl, b, br);
-        out_grad[c] = cu_blend(gc, gbl, gb, gbr);
-        break;
-    case 2: // diagonal push bottom left -> top right
-        cu_blendc(data, channels, out, c, b, bl, l);
-        out_grad[c] = cu_blend(gc, gb, gbl, gl);
-        break;
-    case 11: // horizontal push right -> left
-    case 9:
-        cu_blendc(data, channels, out, c, tr, r, br);
-        out_grad[c] = cu_blend(gc, gtr, gr, gbr);
-        break;
-    case 3: // horizontal push left -> right
-    case 1:
-        cu_blendc(data, channels, out, c, tl, l, bl);
-        out_grad[c] = cu_blend(gc, gtl, gl, gbl);
-        break;
-    case 8: // diagonal push top right -> bottom left
-        cu_blendc(data, channels, out, c, t, tr, r);
-        out_grad[c] = cu_blend(gc, gt, gtr, gr);
-        break;
-    case 12: // vertical push top -> bottom
-    case 4:
+    if (min > max) {
         cu_blendc(data, channels, out, c, tl, t, tr);
         out_grad[c] = cu_blend(gc, gtl, gt, gtr);
-        break;
-    case 0: // diagonal push top left -> bottom right
+        return;
+    }
+
+    // vertical push bottom -> top
+    min = cu_min3(gbl, gb, gbr);
+    max = cu_max3(gtl, gt, gtr);
+
+    if (min > max) {
+        cu_blendc(data, channels, out, c, bl, b, br);
+        out_grad[c] = cu_blend(gc, gbl, gb, gbr);
+        return;
+    }
+
+    // horizontal push left -> right
+    min = cu_min3(gtl, gl, gbl);
+    max = cu_max3(gtr, gr, gbr);
+
+    if (min > max) {
+        cu_blendc(data, channels, out, c, tl, l, bl);
+        out_grad[c] = cu_blend(gc, gtl, gl, gbl);
+        return;
+    }
+
+    // horizontal push right -> left
+    min = cu_min3(gtr, gr, gbr);
+    max = cu_max3(gtl, gl, gbl);
+
+    if (min > max) {
+        cu_blendc(data, channels, out, c, tr, r, br);
+        out_grad[c] = cu_blend(gc, gtr, gr, gbr);
+        return;
+    }
+
+    // diagonal push top right -> bottom left
+    min = cu_min3(gt, gc, gr);
+    max = cu_max3(gl, gbl, gb);
+
+    if (min > gc && gc > max) {
+        cu_blendc(data, channels, out, c, t, tr, r);
+        out_grad[c] = cu_blend(gc, gt, gtr, gr);
+        return;
+    }
+
+    // diagonal push bottom left -> top right
+    min = cu_min3(gb, gc, gl);
+    max = cu_max3(gr, gtr, gt);
+
+    if (min > gc && gc > max) {
+        cu_blendc(data, channels, out, c, b, bl, l);
+        out_grad[c] = cu_blend(gc, gb, gbl, gl);
+        return;
+    }
+
+    // diagonal push top left -> bottom right
+    min = cu_min3(gt, gc, gl);
+    max = cu_max3(gr, gbr, gb);
+
+    if (min > gc && gc > max) {
         cu_blendc(data, channels, out, c, t, tl, l);
         out_grad[c] = cu_blend(gc, gt, gtl, gl);
-        break;
-    default:
-        cu_copyc(data, channels, out, c);
-        out_grad[c] = grad[c];
-        break;
+        return;
     }
+
+    // diagonal push bottom right -> top left
+    min = cu_min3(gb, gc, gr);
+    max = cu_max3(gl, gtl, gt);
+
+    if (min > gc && gc > max) {
+        cu_blendc(data, channels, out, c, b, br, r);
+        out_grad[c] = cu_blend(gc, gb, gbr, gr);
+        return;
+    }
+
+    cu_copyc(data, channels, out, c);
+    out_grad[c] = grad[c];  
 }
 
 __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar* bitmask) {
@@ -563,6 +606,8 @@ __global__ void copy_all(uchar* img, int width, int height, uchar* out) {
     int idx = i * width + j;
     out[idx] = img[idx];
 }
+
+
 
 
 void create_device_image(void** ptr, int size) {
@@ -735,6 +780,18 @@ void image_diff_bitmask_kernel(uchar* in, uchar* in_prev, int width, int height,
     dim3 block(threadBlockWidth, threadBlockHeight);
 
     cu_diff_bitmask<<<grid, block>>>(in, in_prev, width, height, out);
+    cudaDeviceSynchronize();
+    checkCudaCall(cudaGetLastError());
+}
+
+void copy_bitmask_kernel(uchar* in, uchar* bitmask, int width, int height, uchar* out) {
+    // TODO: We dont need 2d coordinates here, it might be better to use flat coordinates.
+
+    // Split input into 16x16 (256 threads per grid)
+    dim3 grid(width / threadBlockWidth + 1, height / threadBlockHeight + 1);
+    dim3 block(threadBlockWidth, threadBlockHeight);
+
+    cu_copy_bitmask<<<grid, block>>>(in, bitmask, width, height, out);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }
