@@ -11,11 +11,14 @@
 const int threadBlockWidth  = 16;
 const int threadBlockHeight = 16;
 
-const int pushBlockWidth = 8;
-const int pushBlockHeight = 8;
+const int pushBlockWidth = 16;
+const int pushBlockHeight = 16;
 
 const int sWidth = threadBlockWidth + 2;
 const int sHeight = threadBlockHeight + 2;
+
+const int pWidth = pushBlockWidth + 2;
+const int pHeight = pushBlockHeight + 2;    
 
 static void checkCudaCall(cudaError_t result) {
     if (result != cudaSuccess) {
@@ -287,16 +290,14 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;    
     
-    const int sWidth = pushBlockWidth + 2;
-    const int sHeight = pushBlockHeight + 2;
     // Load memory into shared memory
-    __shared__ unsigned char shared_in[sWidth * sHeight];
+    __shared__ unsigned char shared_in[pWidth * pHeight];
     load_shared(grad, shared_in, width, height, pushBlockWidth, pushBlockHeight);
 
     i++; j++;
     if (i > height - 2 || j > width - 2) return;
     
-    int cBlock = (threadIdx.y + 1) * sWidth + (threadIdx.x + 1);
+    int cBlock = (threadIdx.y + 1) * pWidth + (threadIdx.x + 1);
     int c = i * width + j;
     
     if (bitmask[c] == 0)  {
@@ -319,17 +320,17 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
 
     uchar gc = shared_in[cBlock];
 
-    uchar gtl = shared_in[cBlock - sWidth - 1];
-    uchar gtr = shared_in[cBlock + sWidth - 1];
+    uchar gtl = shared_in[cBlock - pWidth - 1];
+    uchar gtr = shared_in[cBlock + pWidth - 1];
 
-    uchar gbl = shared_in[cBlock - sWidth + 1];
-    uchar gbr = shared_in[cBlock + sWidth + 1];
+    uchar gbl = shared_in[cBlock - pWidth + 1];
+    uchar gbr = shared_in[cBlock + pWidth + 1];
 
     uchar gt = shared_in[cBlock - 1];
     uchar gb = shared_in[cBlock + 1];
 
-    uchar gl = shared_in[cBlock - sWidth];
-    uchar gr = shared_in[cBlock + sWidth];
+    uchar gl = shared_in[cBlock - pWidth];
+    uchar gr = shared_in[cBlock + pWidth];
 
     uchar min, max;
 

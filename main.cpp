@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
     sprintf(input, "input/images/%03d.bmp", image_idx);
     sprintf(output, "output/images/%03d.bmp", image_idx);
   
-    // printf("Processing %s\n", input);
+    printf("Processing %s\n", input);
 
     unsigned int err = loadbmp_decode_file(input, &original, &width, &height, LOADBMP_RGB);
     if (err) {
@@ -241,20 +241,20 @@ int main(int argc, char** argv) {
   }
   
   gettimeofday(&complete_end, NULL);
-
-  printf("Overall Time: %.2f\n", get_time(complete_start, complete_end));
+  float tt = get_time(complete_start, complete_end);
+  printf("Overall Time: %.2f\n", tt);
   printf("Transfer Time: %.2f\n", tot_transfer);
   printf("---------------\nAlgorithm Stats\n------------------\n");
   int size = new_width * new_height * (end_idx - start_idx);
   printf("%lld/%d pixels (%.2f percent skipped)\n", tot_skip, size, (((size - tot_skip)) / (float)size) * 100.0);
 
-  printf("Total Time:   %.5f\n", tot_all);
-  printf("  Resizing:   %.5f\n", tot_res);
-  printf("  Luminance:  %.5f\n", tot_lum);
-  printf("  Gauss + Edge:  %.5f\n", tot_gaus_diff);
-  printf("  Unblurring: %.5f\n", tot_blur);
-  printf("  Sobel:      %.5f\n", tot_sobel);
-  printf("  Refining:   %.5f\n", tot_refine);
+  printf("Total Time:     %.5f (%.2f fps)\n", tot_all, (end_idx - start_idx) / tot_all);
+  printf("  Resizing:     %.5f\n", tot_res);
+  printf("  Luminance:    %.5f\n", tot_lum);
+  printf("  Gauss + Edge: %.5f\n", tot_gaus_diff);
+  printf("  Unblurring:   %.5f\n", tot_blur);
+  printf("  Sobel:        %.5f\n", tot_sobel);
+  printf("  Refining:     %.5f\n", tot_refine);
 
   return 0;
 }
