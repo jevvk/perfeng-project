@@ -229,9 +229,9 @@ int main(int argc, char** argv) {
 #endif
 
     // err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
-    if (err) {
-      printf("Error during saving file to %s\n", output);
-    }
+    // if (err) {
+      // printf("Error during saving file to %s\n", output);
+    // }
 
     if (image_idx == end_idx - 1) {
       free(res);
