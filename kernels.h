@@ -27,7 +27,7 @@ void dilate_kernel(uchar* in, int width, int height, uchar* out);
 void luminance_kernel(uchar* in, int width, int height, int channels, uchar* out);
 void push_grad_kernel(unsigned char* in, int width, int height, unsigned char* out, uchar* bitmask);
 void sobel_kernel(unsigned char* in, int width, int height, unsigned char* out);
-void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels, uchar* bitmask);
+void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, uchar* bitmask);
 #else
 void resize(uchar* in, int width, int height, int channels, float scale, uchar* out);
 void luminance(uchar* in, int width, int height, int channels, uchar* out);

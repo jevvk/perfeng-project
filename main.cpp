@@ -119,7 +119,7 @@ void process_image_cuda(struct cuda_images* ci, uchar* original, uchar* res, uch
 
   gettimeofday(&tv_refine, NULL);
   for (int i = 0; i < REFINE_ITER; i++) {
-    push_rgb_kernel(ci->remote_res, ci->remote_grad, ci->remote_tmpnc, ci->remote_tmp1c, new_width, new_height, CHANNELS, ci->remote_edges);
+    push_rgb_kernel(ci->remote_res, ci->remote_grad, ci->remote_tmpnc, ci->remote_tmp1c, new_width, new_height, ci->remote_edges);
 
     tmp = ci->remote_res;
     ci->remote_res = ci->remote_tmpnc;

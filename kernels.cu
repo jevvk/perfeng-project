@@ -7,6 +7,7 @@
 #define RGB_STRENGTH 0.5
 #define BITMASK_RADIUS 5
 #define GRADIENT_THRESHOLD 64
+#define CHANNELS 3
 
 const int threadBlockWidth  = 16;
 const int threadBlockHeight = 16;
@@ -56,9 +57,10 @@ __device__ void load_shared(uchar* in, uchar* shared_in, int width, int height, 
     __syncthreads();
 }
 
-__device__ void cu_copyc(uchar* in, int channels, uchar* out, int v) {
-    for (int i = 0; i < channels; i++) {
-        out[v * channels + i] = in[v * channels + i];
+__device__ void cu_copyc(uchar* in, uchar* out, int v) {
+    #pragma unroll
+    for (int i = 0; i < CHANNELS; i++) {
+        out[v * CHANNELS + i] = in[v * CHANNELS + i];
     }
 }
 
@@ -99,9 +101,10 @@ __device__ uchar cu_blend_lightest(uchar lightest, uchar base, uchar a, uchar b,
   }
   
 
-__device__ void cu_blendc(uchar* in, int channels, uchar* out, int base, int a, int b, int c) {
-    for (int i = 0; i < channels; i++) {
-        out[base * channels + i] = cu_blend(in[base * channels + i], in[a * channels + i], in[b * channels + i], in[c * channels + i]);
+__device__ void cu_blendc(uchar* in, uchar* out, unsigned int base, unsigned int a, unsigned int b, unsigned int c) {
+    #pragma unroll
+    for (int i = 0; i < CHANNELS; i++) {
+        out[base * CHANNELS + i] = cu_blend(in[base * CHANNELS + i], in[a * CHANNELS + i], in[b * CHANNELS + i], in[c * CHANNELS + i]);
     }
 }
 
@@ -286,7 +289,7 @@ __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
     }
 }
 
-__global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels, uchar* bitmask) {
+__global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, uchar* bitmask) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;    
     
@@ -299,10 +302,11 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     
     int cBlock = (threadIdx.y + 1) * pWidth + (threadIdx.x + 1);
     int c = i * width + j;
-    
+    int gc = shared_in[cBlock];
+
     if (bitmask[c] == 0)  {
-        out_grad[c] = grad[c];
-        cu_copyc(data, channels, out, c);
+        out_grad[c] = gc;
+        cu_copyc(data, out, c);
         return;
     }
 
@@ -318,28 +322,27 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     int bl = l + 1;
     int br = r + 1;    
 
-    uchar gc = shared_in[cBlock];
 
-    uchar gtl = shared_in[cBlock - pWidth - 1];
-    uchar gtr = shared_in[cBlock + pWidth - 1];
+    int gtl = shared_in[cBlock - pWidth - 1];
+    int gtr = shared_in[cBlock + pWidth - 1];
 
-    uchar gbl = shared_in[cBlock - pWidth + 1];
-    uchar gbr = shared_in[cBlock + pWidth + 1];
+    int gbl = shared_in[cBlock - pWidth + 1];
+    int gbr = shared_in[cBlock + pWidth + 1];
 
-    uchar gt = shared_in[cBlock - 1];
-    uchar gb = shared_in[cBlock + 1];
+    int gt = shared_in[cBlock - 1];
+    int gb = shared_in[cBlock + 1];
 
-    uchar gl = shared_in[cBlock - pWidth];
-    uchar gr = shared_in[cBlock + pWidth];
+    int gl = shared_in[cBlock - pWidth];
+    int gr = shared_in[cBlock + pWidth];
 
-    uchar min, max;
+    int min, max;
 
     // vertical push top -> bottom
     min = cu_min3(gtl, gt, gtr);
     max = cu_max3(gbl, gb, gbr);
 
     if (min > max) {
-        cu_blendc(data, channels, out, c, tl, t, tr);
+        cu_blendc(data, out, c, tl, t, tr);
         out_grad[c] = cu_blend(gc, gtl, gt, gtr);
         return;
     }
@@ -349,7 +352,7 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     max = cu_max3(gtl, gt, gtr);
 
     if (min > max) {
-        cu_blendc(data, channels, out, c, bl, b, br);
+        cu_blendc(data, out, c, bl, b, br);
         out_grad[c] = cu_blend(gc, gbl, gb, gbr);
         return;
     }
@@ -359,7 +362,7 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     max = cu_max3(gtr, gr, gbr);
 
     if (min > max) {
-        cu_blendc(data, channels, out, c, tl, l, bl);
+        cu_blendc(data, out, c, tl, l, bl);
         out_grad[c] = cu_blend(gc, gtl, gl, gbl);
         return;
     }
@@ -369,7 +372,7 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     max = cu_max3(gtl, gl, gbl);
 
     if (min > max) {
-        cu_blendc(data, channels, out, c, tr, r, br);
+        cu_blendc(data, out, c, tr, r, br);
         out_grad[c] = cu_blend(gc, gtr, gr, gbr);
         return;
     }
@@ -379,7 +382,7 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     max = cu_max3(gl, gbl, gb);
 
     if (min > gc && gc > max) {
-        cu_blendc(data, channels, out, c, t, tr, r);
+        cu_blendc(data, out, c, t, tr, r);
         out_grad[c] = cu_blend(gc, gt, gtr, gr);
         return;
     }
@@ -389,7 +392,7 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     max = cu_max3(gr, gtr, gt);
 
     if (min > gc && gc > max) {
-        cu_blendc(data, channels, out, c, b, bl, l);
+        cu_blendc(data, out, c, b, bl, l);
         out_grad[c] = cu_blend(gc, gb, gbl, gl);
         return;
     }
@@ -399,7 +402,7 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     max = cu_max3(gr, gbr, gb);
 
     if (min > gc && gc > max) {
-        cu_blendc(data, channels, out, c, t, tl, l);
+        cu_blendc(data, out, c, t, tl, l);
         out_grad[c] = cu_blend(gc, gt, gtl, gl);
         return;
     }
@@ -409,12 +412,12 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     max = cu_max3(gl, gtl, gt);
 
     if (min > gc && gc > max) {
-        cu_blendc(data, channels, out, c, b, br, r);
+        cu_blendc(data, out, c, b, br, r);
         out_grad[c] = cu_blend(gc, gb, gbr, gr);
         return;
     }
 
-    cu_copyc(data, channels, out, c);
+    cu_copyc(data, out, c);
     out_grad[c] = grad[c];  
 }
 
@@ -695,19 +698,19 @@ void sobel_kernel(uchar* in, int width, int height, uchar* out) {
     checkCudaCall(cudaGetLastError());
 }
 
-void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, int channels, uchar* bitmask) {
+void push_rgb_kernel(uchar* data, uchar* grad, uchar* out, uchar* out_grad, int width, int height, uchar* bitmask) {
     // Split input into 16x16 (256 threads per grid)
     dim3 grid(width / pushBlockWidth + 1, height / pushBlockHeight + 1);
     dim3 block(pushBlockWidth, pushBlockHeight);
 
-    cu_push_rgb<<<grid, block>>>(data, grad, out, out_grad, width, height, channels, bitmask);
+    cu_push_rgb<<<grid, block>>>(data, grad, out, out_grad, width, height, bitmask);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 
-    copy_horizontal<<<width - 2, 1>>>(out, width, height, channels);
+    copy_horizontal<<<width - 2, 1>>>(out, width, height, CHANNELS);
     cudaDeviceSynchronize();
 
-    copy_vertical<<<height, 1>>>(out, width, height, channels);
+    copy_vertical<<<height, 1>>>(out, width, height, CHANNELS);
     cudaDeviceSynchronize();
     checkCudaCall(cudaGetLastError());
 }
