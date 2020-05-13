@@ -80,6 +80,38 @@ void free_cuda_images(struct cuda_images* ci) {
   free_device_image((void*) ci->remote_tmpnc);
 }
 
+void write_cuda_image(uchar* cuda_image, int width, int height, char* filename) {
+  uchar* image = (uchar*) malloc(width * height * sizeof(uchar));
+
+  copy_from_device(image, cuda_image, width * height * sizeof(uchar));
+
+  for (int i = 0; i < width * height * 3; i++) {
+    res[i] = tmp1c[i / 3] * 255;
+  }
+
+  unsigned int err = loadbmp_encode_file(filename, image, width, height, LOADBMP_RGB);
+
+  free(image);
+
+  if (err) {
+    printf("Error during saving file to %s\n", filename);
+  }
+}
+
+void write_cuda_image3(uchar* cuda_image, int width, int height, char* filename) {
+  uchar* image = (uchar*) malloc(width * height * 3 * sizeof(uchar));
+
+  copy_from_device(image, cuda_image, width * height * 3 * sizeof(uchar));
+
+  unsigned int err = loadbmp_encode_file(filename, image, width, height, LOADBMP_RGB);
+
+  free(image);
+
+  if (err) {
+    printf("Error during saving file to %s\n", filename);
+  }
+}
+
 void process_image_cuda(struct cuda_images* ci, struct cuda_images* ci_prev, uchar* original, uchar* res, uchar* tmp1c, int width, int height, int scale) {
   void* tmp;
 
