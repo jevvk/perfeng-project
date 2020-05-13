@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
     sprintf(input, "input/images/%03d.bmp", image_idx);
     sprintf(output, "output/images/%03d.bmp", image_idx);
   
-    printf("Processing %s\n", input);
+    // printf("Processing %s\n", input);
 
     unsigned int err = loadbmp_decode_file(input, &original, &width, &height, LOADBMP_RGB);
     if (err) {
