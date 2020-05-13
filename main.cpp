@@ -81,12 +81,14 @@ void free_cuda_images(struct cuda_images* ci) {
 }
 
 void write_cuda_image(uchar* cuda_image, int width, int height, char* filename) {
-  uchar* image = (uchar*) malloc(width * height * sizeof(uchar));
+  uchar* image = (uchar*) malloc(width * height * 3 * sizeof(uchar));
 
   copy_from_device(image, cuda_image, width * height * sizeof(uchar));
 
-  for (int i = 0; i < width * height * 3; i++) {
-    res[i] = tmp1c[i / 3] * 255;
+  for (int i = width * height - 1; i >= 0; i--) {
+    image[i * 3] = image[i];
+    image[i * 3 + 1] = image[i];
+    image[i * 3 + 2] = image[i];
   }
 
   unsigned int err = loadbmp_encode_file(filename, image, width, height, LOADBMP_RGB);
