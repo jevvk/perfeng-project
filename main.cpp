@@ -187,8 +187,8 @@ int main(int argc, char** argv) {
   gettimeofday(&complete_start, NULL);
 
   int new_width, new_height;
-  int start_idx = 1;
-  int end_idx = 101;
+  int start_idx = 70;
+  int end_idx = 75;
 
   uchar* res;
   uchar* tmp1c;
@@ -197,14 +197,13 @@ int main(int argc, char** argv) {
     sprintf(input, "input/images/%03d.bmp", image_idx);
     sprintf(output, "output/images/%03d.bmp", image_idx);
   
-    printf("Processing %s\n", input);
 
     unsigned int err = loadbmp_decode_file(input, &original, &width, &height, LOADBMP_RGB);
     if (err) {
       printf("Could not open or find the image\n");
       return 1;
     }
-    if (image_idx == 1) {
+    if (image_idx == start_idx) {
       new_width = floor(scale * width);
       new_height = floor(scale * height);
       res = (uchar*) malloc(sizeof(uchar) * new_width * new_height * CHANNELS);
@@ -228,7 +227,7 @@ int main(int argc, char** argv) {
     printf("Not yet implemented...\n");
 #endif
 
-    // err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
+    err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
     // if (err) {
       // printf("Error during saving file to %s\n", output);
     // }

@@ -129,6 +129,7 @@ __device__ float cu_clamp(float val, float min_val, float max_val) {
 
 __device__ uchar cu_blend(uchar base, uchar a, uchar b, uchar c) {
     return (1.0 - RGB_STRENGTH) * base + RGB_STRENGTH * (a + b + c) / 3.0;
+    // return (int)base >> 1 + (int)((a + b + c) / 3.0) >> 1;
 }
   
 __device__ uchar cu_blend_lightest(uchar lightest, uchar base, uchar a, uchar b, uchar c) {
@@ -306,7 +307,7 @@ __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
     const char sx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
     const char sy[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
   
-    if (i < width - 2 && j < height - 2) {
+    if (i < height - 2 && j < width - 2) {
         int mag_x = 0;
         int mag_y = 0;
 
