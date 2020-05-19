@@ -12,7 +12,6 @@
 #include "bmp.h"
 
 #define CHANNELS 3 // bmp always has 3 channels (r, g, b)
-#define RGB_STRENGTH 0.5
 #define UNBLUR_ITER 3
 #define REFINE_ITER 5
 #define BITMASK_DILATE 4
@@ -135,20 +134,20 @@ void process_image_cuda(struct cuda_images* ci, uchar* original, uchar* res, uch
   gettimeofday(&tv_end, NULL);
 
   copy_from_device(res, ci->remote_res, new_width * new_height * CHANNELS * sizeof(uchar));
-  copy_from_device(tmp1c, ci->remote_edges, new_width * new_height * sizeof(uchar));
+  // copy_from_device(tmp1c, ci->remote_edges, new_width * new_height * sizeof(uchar));
 
   gettimeofday(&tv_transfer, NULL);
   tot_transfer += get_time(tv_end, tv_transfer);
 
-  int pos = 0;
-  for (int i = 0; i < new_height; i++) {
-    for (int j = 0; j < new_width; j++) {
-      if (tmp1c[i * new_width + j] != 0 && tmp1c[i * new_width + j] != 1)
-        printf("%d\n", tmp1c[i * new_width + j]);
-      pos += (tmp1c[i * new_width + j] != 0);
-    }
-  }
-  tot_skip += pos;
+  // int pos = 0;
+  // for (int i = 0; i < new_height; i++) {
+  //   for (int j = 0; j < new_width; j++) {
+  //     if (tmp1c[i * new_width + j] != 0 && tmp1c[i * new_width + j] != 1)
+  //       printf("%d\n", tmp1c[i * new_width + j]);
+  //     pos += (tmp1c[i * new_width + j] != 0);
+  //   }
+  // }
+  // tot_skip += pos;
 
   tot_all += get_time(tv_res, tv_end);
   tot_res += get_time(tv_res, tv_lum);
@@ -227,7 +226,7 @@ int main(int argc, char** argv) {
     printf("Not yet implemented...\n");
 #endif
 
-    err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
+    // err = loadbmp_encode_file(output, res, new_width, new_height, LOADBMP_RGB);
     // if (err) {
       // printf("Error during saving file to %s\n", output);
     // }
