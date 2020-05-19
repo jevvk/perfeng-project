@@ -4,7 +4,6 @@
 #include <stdio.h>
 
 #define uchar unsigned char
-#define RGB_STRENGTH 0.5
 #define BITMASK_RADIUS 5
 #define GRADIENT_THRESHOLD 64
 #define CHANNELS 3
@@ -128,8 +127,9 @@ __device__ float cu_clamp(float val, float min_val, float max_val) {
 }
 
 __device__ uchar cu_blend(uchar base, uchar a, uchar b, uchar c) {
-    return (1.0 - RGB_STRENGTH) * base + RGB_STRENGTH * (a + b + c) / 3.0;
-    // return (int)base >> 1 + (int)((a + b + c) / 3.0) >> 1;
+    int sum = (int)a + b + c;
+    int avg = sum / 3;
+    return ((int)base>>1) + (avg >> 1);
 }
   
 __device__ uchar cu_blend_lightest(uchar lightest, uchar base, uchar a, uchar b, uchar c) {

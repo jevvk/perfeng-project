@@ -187,8 +187,8 @@ int main(int argc, char** argv) {
   gettimeofday(&complete_start, NULL);
 
   int new_width, new_height;
-  int start_idx = 70;
-  int end_idx = 75;
+  int start_idx = 1;
+  int end_idx = 101;
 
   uchar* res;
   uchar* tmp1c;
