@@ -464,24 +464,25 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
 
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
 
-    int c = in[i * width + j];
+    int ic = i * width + j;
+    int c = in[ic];
 
-    if (bitmask[i * width + j] == 0)  {
-        out[i * width + j] = c;
+    if (bitmask[ic] == 0)  {
+        out[ic] = c;
         return;
     }
 
-    int tl = in[(i - 1) * width + (j - 1)];
-    int tr = in[(i + 1) * width + (j - 1)];
+    int tl = in[ic - width - 1];
+    int tr = in[ic - width + 1];
 
-    int bl = in[(i - 1) * width + (j + 1)];
-    int br = in[(i + 1) * width + (j + 1)];
+    int bl = in[ic + width - 1];
+    int br = in[ic + width + 1];
     
-    int t = in[i * width + (j - 1)];
-    int b = in[i * width + (j + 1)];
+    int t = in[ic - width];
+    int b = in[ic + width];
 
-    int l = in[(i - 1) * width + j];
-    int r = in[(i + 1) * width + j];
+    int l = in[ic - 1];
+    int r = in[ic + 1];
 
     int min, max;
 
@@ -490,11 +491,9 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
     max = cu_max3(bl, b, br);
 
     uchar res = c;
-    uchar min_res = c;
 
     if (min > max) {
         res = cu_blend_lightest(res, c, tl, t, tr);
-        min_res = res > min_res ? min_res : res;
     }
 
     // vertical push bottom -> top
@@ -503,7 +502,6 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
 
     if (min > max) {
         res = cu_blend_lightest(res, c, bl, b, br);
-        min_res = res > min_res ? min_res : res;
     }
 
     // horizontal push left -> right
@@ -512,7 +510,6 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
 
     if (min > max) {
         res = cu_blend_lightest(res, c, tl, l, bl);
-        min_res = res > min_res ? min_res : res;
     }
 
     // horizontal push right -> left
@@ -521,7 +518,6 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
 
     if (min > max) {
         res = cu_blend_lightest(res, c, tr, r, br);
-        min_res = res > min_res ? min_res : res;
     }
 
     // diagonal push top right -> bottom left
@@ -530,7 +526,6 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
 
     if (min > res && res > max) {
         res = cu_blend_lightest(res, c, t, tr, r);
-        min_res = res > min_res ? min_res : res;
     }
 
     // diagonal push bottom left -> top right
@@ -539,7 +534,6 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
 
     if (min > res && res > max) {
         res = cu_blend_lightest(res, c, b, bl, l);
-        min_res = res > min_res ? min_res : res;
     }
 
     // diagonal push top left -> bottom right
@@ -548,7 +542,6 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
 
     if (min > res && res > max) {
         res = cu_blend_lightest(res, c, t, tl, l);
-        min_res = res > min_res ? min_res : res;
     }
 
     // diagonal push bottom right -> top left
@@ -557,10 +550,9 @@ __global__ void cu_push_grad(uchar* in, int width, int height, uchar* out, uchar
 
     if (min > res && res > max) {
         res = cu_blend_lightest(res, c, b, br, r);
-        min_res = res > min_res ? min_res : res;
     }
 
-    out[i * width + j] = min_res;
+    out[ic] = res;
 }
 
 __global__ void copy_horizontal(uchar* img, int width, int height, int channels) {
