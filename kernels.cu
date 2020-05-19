@@ -4,6 +4,8 @@
 
 #define uchar unsigned char
 #define RGB_STRENGTH 0.5
+#define BITMASK_RADIUS 2
+#define BITMASK_THRESHOLD 1
 
 const int threadBlockWidth  = 16;
 const int threadBlockHeight = 16;
@@ -160,7 +162,7 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     const float g[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
 
     // TODO: Take into account edge pixels and dont read pixels out of bounds.
-
+    int res = 0;
     #pragma unroll
     for (int ki = 0; ki < 3; ki++) {
         for (int kj = 0; kj < 3; kj++) {
@@ -177,21 +179,21 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
  * If any value is large enough, the bitmask sets the value to 1, 0 otherwise.
  * This should allow the more specific use of exclusively pixels around edges and reduce operations.
  */
-__global__ void cu_bitmask(uchar* in, int width, int height, uchar* out, int radius, int threshold) {
+__global__ void cu_bitmask(uchar* in, int width, int height, uchar* out) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i == 0 || i >= height - 1 || j == 0 || j >= width - 1) return;
 
-    int lowX = max(j - radius, 0);
-    int highX = min(j + radius + 1, width - 1);
-    int lowY = max(i - radius, 0);
-    int highY = min(i + radius + 1, height - 1);
+    int lowX = max(j - BITMASK_RADIUS, 0);
+    int highX = min(j + BITMASK_RADIUS + 1, width - 1);
+    int lowY = max(i - BITMASK_RADIUS, 0);
+    int highY = min(i + BITMASK_RADIUS + 1, height - 1);
     
     for (int x = lowX; x < highX; x++) {
         for (int y = lowY; y < highY; y++) {
             // If any value in the radius is large enough, this pixel has to be considered and the loop can terminate.
-            if (in[i * width + j] > threshold) {
+            if (in[i * width + j] > BITMASK_THRESHOLD) {
                 out[i * width + j] = 1;
                 return;
             }
