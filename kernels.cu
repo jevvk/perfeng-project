@@ -378,47 +378,34 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     quadrant = quadrant << 1 + sign_mag_y;
     quadrant = quadrant << 1 + sign_thresh_mag_y;
 
-    switch (quadrant) {
-    case 10: // diagonal push bottom right -> top left
-        cu_blendc(shared_data, out, c, s_c, s_b, s_br, s_r);
-        out_grad[c] = cu_blend(gc, gb, gbr, gr);
-        break;
-    case 14: // vertical push bottom -> top
-    case 6:
-        cu_blendc(shared_data, out, c, s_c, s_bl, s_b, s_br);
-        out_grad[c] = cu_blend(gc, gbl, gb, gbr);
-        break;
-    case 2: // diagonal push bottom left -> top right
-        cu_blendc(shared_data, out, c, s_c, s_b, s_bl, s_l);
-        out_grad[c] = cu_blend(gc, gb, gbl, gl);
-        break;
-    case 11: // horizontal push right -> left
-    case 9:
-        cu_blendc(shared_data, out, c, s_c, s_tr, s_r, s_br);
-        out_grad[c] = cu_blend(gc, gtr, gr, gbr);
-        break;
-    case 3: // horizontal push left -> right
-    case 1:
-        cu_blendc(shared_data, out, c, s_c, s_tl, s_l, s_bl);
-        out_grad[c] = cu_blend(gc, gtl, gl, gbl);
-        break;
-    case 8: // diagonal push top right -> bottom left
-        cu_blendc(shared_data, out, c, s_c, s_t, s_tr, s_r);
-        out_grad[c] = cu_blend(gc, gt, gtr, gr);
-        break;
-    case 12: // vertical push top -> bottom
-    case 4:
-        cu_blendc(shared_data, out, c, s_c, s_tl, s_t, s_tr);
-        out_grad[c] = cu_blend(gc, gtl, gt, gtr);
-        break;
-    case 0: // diagonal push top left -> bottom right
-        cu_blendc(shared_data, out, c, s_c, s_t, s_tl, s_l);
-        out_grad[c] = cu_blend(gc, gt, gtl, gl);
-        break;
-    default:
+    // blend flag, param1, param2, param3
+    int params[] = {
+        1, s_t,  s_tl, s_l,  gt,  gtl, gl,  // 0
+        1, s_tl, s_l,  s_bl, gtl, gl,  gbl, // 1
+        1, s_b,  s_bl, s_l,  gb,  gbl, gl,  // 2
+        1, s_tl, s_l,  s_bl, gtl, gl,  gbl, // 3
+        1, s_tl, s_t,  s_tr, gtl, gt,  gtr, // 4
+        0, 0,    0,    0,    0,   0,   0,   // 5
+        1, s_bl, s_b,  s_br, gbl, gb,  gbr, // 6
+        0, 0,    0,    0,    0,   0,   0,   // 7
+        1, s_t,  s_tr, s_r,  gt,  gtr, gr,  // 8
+        1, s_tr, s_r,  s_br, gtr, gr,  gbr, // 9
+        1, s_b,  s_br, s_r,  gb,  gbr, gr,  // 10
+        1, s_tr, s_r,  s_br, gtr, gr,  gbr, // 11
+        1, s_tl, s_t,  s_tr, gtl, gt,  gtr, // 12
+        0, 0,    0,    0,    0,   0,   0,   // 13
+        1, s_bl, s_b,  s_br, gbl, gb,  gbr, // 14
+        0, 0,    0,    0,    0,   0,   0    // 15
+    };
+
+    int* c_params = &params[quadrant * 7];
+
+    if (c_params[0] == 1) {
+        cu_blendc(shared_data, out, c, s_c, c_params[1], c_params[2], c_params[3]);
+        out_grad[c] = cu_blend(gc, c_params[4], c_params[5], c_params[6]);
+    } else {
         cu_copyc(shared_data, out, c, s_c);
         out_grad[c] = shared_grad[s_c];
-        break;
     }
 }
 
