@@ -338,16 +338,16 @@ __global__ void cu_push_rgb(uchar* data, uchar* grad, uchar* out, uchar* out_gra
     }
 
     int s_tl = s_c - sWidth - 1;
-    int s_tr = s_c + sWidth + 1;
+    int s_tr = s_c - sWidth + 1;
 
-    int s_bl = s_c - sWidth + 1;
+    int s_bl = s_c + sWidth - 1;
     int s_br = s_c + sWidth + 1;
     
-    int s_t = s_c - 1;
-    int s_b = s_c + 1;
+    int s_l = s_c - 1;
+    int s_r = s_c + 1;
 
-    int s_l = s_c - sWidth;
-    int s_r = s_c + sWidth;
+    int s_t = s_c - sWidth;
+    int s_b = s_c + sWidth;
 
     uchar gc = shared_grad[s_c];
 
