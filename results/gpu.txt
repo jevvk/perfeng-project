@@ -1,0 +1,7 @@
+Total compute time: 0.04365 (22.91 fps)
+  Resizing:   0.00094
+  Blurring:   0.00134
+  Luminance:  0.00069
+  Unblurring: 0.00523
+  Sobel:      0.00038
+  Refining:   0.03508
