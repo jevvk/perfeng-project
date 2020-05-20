@@ -1,2 +1,5 @@
 comic-upscaler
 input/das_images/*
+kernels.o
+results
+*.bmp
