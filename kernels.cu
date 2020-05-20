@@ -126,7 +126,7 @@ __device__ uchar cu_max3(uchar a, uchar b, uchar c) {
     return max(max(a, b), c);
 }
 
-__device__ float cu_clamp(float val, float min_val, float max_val) {
+__device__ float cu_clamp(uchar val, uchar min_val, uchar max_val) {
     return max(min(val, max_val), min_val);
 }
 
@@ -315,6 +315,7 @@ __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
         int mag_x = 0;
         int mag_y = 0;
 
+        #pragma loop unroll
         for (int ky = 0; ky < 3; ky++) {
             for (int kx = 0; kx < 3; kx++) {
                 mag_x += sx[ky][kx] * in[(i + ky) * width + j + kx];
@@ -322,7 +323,7 @@ __global__ void cu_sobel(uchar* in, int width, int height, uchar* out) {
             }
         }
     
-        out[i * width + j] = 255.0 - cu_clamp(sqrt((float) (mag_x * mag_x + mag_y * mag_y)), 0, 255.0);
+        out[i * width + j] = 255 - cu_clamp((uchar)sqrt((float) (mag_x * mag_x + mag_y * mag_y)), 0, 255);
       
     }
 }
