@@ -178,9 +178,8 @@ int main(int argc, char** argv) {
 #endif
   free(res);
 
-  printf("Total compute time: %.5f\n", get_time(tv_res, tv_end));
-  printf("  Resizing:   %.5f\n", get_time(tv_res, tv_med));
-  printf("  Blurring:   %.5f\n", get_time(tv_med, tv_lum));
+  printf("Total compute time: %.5f (%.2f fps)\n", get_time(tv_res, tv_end), 1/get_time(tv_res, tv_end));
+  printf("  Resizing:   %.5f\n", get_time(tv_res, tv_lum));
   printf("  Luminance:  %.5f\n", get_time(tv_lum, tv_gaus_diff));
   printf("  Gauss + Edge:  %.5f\n", get_time(tv_gaus_diff, tv_blur));
   printf("  Unblurring: %.5f\n", get_time(tv_blur, tv_sobel));
