@@ -180,7 +180,7 @@ int main(int argc, char** argv) {
   free(sob);
   free(res);
 
-  printf("Total compute time: %.5f\n", get_time(tv_res, tv_end));
+  printf("Total compute time: %.5f (%.2f fps)\n", get_time(tv_res, tv_end), 1/get_time(tv_res, tv_end));
   printf("  Resizing:   %.5f\n", get_time(tv_res, tv_med));
   printf("  Blurring:   %.5f\n", get_time(tv_med, tv_lum));
   printf("  Luminance:  %.5f\n", get_time(tv_lum, tv_gaus_diff));
