@@ -219,7 +219,6 @@ int main(int argc, char** argv) {
     tot_transfer += get_time(transfer_start, transfer_end);
 
     // Two arrays to store the resulting image and the bitmask (to count skipped pixels)
-
 #ifdef USE_CUDA
     process_image_cuda(ci, original, res, tmp1c, width, height, scale);
 #else
@@ -240,19 +239,22 @@ int main(int argc, char** argv) {
   
   gettimeofday(&complete_end, NULL);
   float tt = get_time(complete_start, complete_end);
-  printf("Overall Time: %.2f\n", tt);
-  printf("Transfer Time: %.2f\n", tot_transfer);
-  printf("---------------\nAlgorithm Stats\n------------------\n");
-  int size = new_width * new_height * (end_idx - start_idx);
-  printf("%lld/%d pixels (%.2f percent skipped)\n", tot_skip, size, (((size - tot_skip)) / (float)size) * 100.0);
+  // printf("Overall Time: %.2f\n", tt);
+  // printf("Transfer Time: %.2f\n", tot_transfer);
+  // printf("---------------\nAlgorithm Stats\n------------------\n");
+  // int size = new_width * new_height * (end_idx - start_idx);
+  // printf("%lld/%d pixels (%.2f percent skipped)\n", tot_skip, size, (((size - tot_skip)) / (float)size) * 100.0);
 
-  printf("Total Time:     %.5f (%.2f fps)\n", tot_all, (end_idx - start_idx) / tot_all);
-  printf("  Resizing:     %.5f\n", tot_res);
-  printf("  Luminance:    %.5f\n", tot_lum);
-  printf("  Gauss + Edge: %.5f\n", tot_gaus_diff);
-  printf("  Unblurring:   %.5f\n", tot_blur);
-  printf("  Sobel:        %.5f\n", tot_sobel);
-  printf("  Refining:     %.5f\n", tot_refine);
+  // printf("Total Time:     %.5f (%.2f fps)\n", tot_all, (end_idx - start_idx) / tot_all);
+  // printf("  Resizing:     %.5f\n", tot_res);
+  // printf("  Luminance:    %.5f\n", tot_lum);
+  // printf("  Gauss + Edge: %.5f\n", tot_gaus_diff);
+  // printf("  Unblurring:   %.5f\n", tot_blur);
+  // printf("  Sobel:        %.5f\n", tot_sobel);
+  // printf("  Refining:     %.5f\n", tot_refine);
+
+  float fps = 1 / tot_all;
+  printf("%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n", tot_all, fps, tot_res, tot_lum, tot_gaus_diff, tot_blur, tot_sobel, tot_refine);
 
   return 0;
 }
