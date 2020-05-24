@@ -1,3 +1,4 @@
 comic-upscaler
 *.bmp
 results
+kernels.o
