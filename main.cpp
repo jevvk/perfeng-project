@@ -101,8 +101,6 @@ int main(int argc, char** argv) {
   copy_to_device(remote_original, original, width * height * channels * sizeof(uchar));
 #endif
 
-  printf("Creating image of %dx%d\n", new_width, new_height);
-
   struct timeval tv_res, tv_med, tv_lum, tv_blur, tv_sobel, tv_refine, tv_end;
   struct timeval tv_gaus_diff;
   
@@ -156,19 +154,19 @@ int main(int argc, char** argv) {
   copy_from_device(res, remote_res, new_width * new_height * channels * sizeof(uchar));
   copy_from_device(tmp1c, remote_edges, new_width * new_height * sizeof(uchar));
 
-  err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
-  if (err) {
-    printf("Error during saving file to %s\n", argv[3]);
-  }
+  // err = loadbmp_encode_file(argv[3], res, new_width, new_height, LOADBMP_RGB);
+  // if (err) {
+  //   printf("Error during saving file to %s\n", argv[3]);
+  // }
 
-  int pos = 0;
-  for (int i = 0; i < new_height; i++) {
-    for (int j = 0; j < new_width; j++) {
-      pos += tmp1c[i * new_width + j];
-    }
-  }
-  int size = new_width * new_height;
-  printf("%d/%d pixels (%.2f percent skipped)\n", pos, size, (((size - pos)) / (float)size) * 100.0);
+  // int pos = 0;
+  // for (int i = 0; i < new_height; i++) {
+  //   for (int j = 0; j < new_width; j++) {
+  //     pos += tmp1c[i * new_width + j];
+  //   }
+  // }
+  // int size = new_width * new_height;
+  // printf("%d/%d pixels (%.2f percent skipped)\n", pos, size, (((size - pos)) / (float)size) * 100.0);
 
 #ifndef USE_CUDA
   free(upscaled);
@@ -178,13 +176,16 @@ int main(int argc, char** argv) {
 #endif
   free(res);
 
-  printf("Total compute time: %.5f (%.2f fps)\n", get_time(tv_res, tv_end), 1/get_time(tv_res, tv_end));
-  printf("  Resizing:   %.5f\n", get_time(tv_res, tv_lum));
-  printf("  Luminance:  %.5f\n", get_time(tv_lum, tv_gaus_diff));
-  printf("  Gauss + Edge:  %.5f\n", get_time(tv_gaus_diff, tv_blur));
-  printf("  Unblurring: %.5f\n", get_time(tv_blur, tv_sobel));
-  printf("  Sobel:      %.5f\n", get_time(tv_sobel, tv_refine));
-  printf("  Refining:   %.5f\n", get_time(tv_refine, tv_end));
+  float total = get_time(tv_res, tv_end);
+  float fps = 1 / total;
+  float tres = get_time(tv_res, tv_lum);
+  float tlum = get_time(tv_lum, tv_gaus_diff);
+  float tgaus = get_time(tv_gaus_diff, tv_blur);
+  float tunblur = get_time(tv_blur, tv_sobel);
+  float tsobel = get_time(tv_sobel, tv_refine);
+  float tref = get_time(tv_refine, tv_end);
+  // printf();
+  printf("%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n", total, fps, tres, tlum, tgaus, tunblur, tsobel, tref);
 
   return 0;
 }

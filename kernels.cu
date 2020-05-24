@@ -599,7 +599,7 @@ void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uch
     dim3 block(threadBlockWidth, threadBlockHeight);
     
     copy_all<<<grid, block>>>(in, width, height, worker_arr);
-    printf("Created in copy\n");
+
     for (int i = 0; i < n_iter; i++) {
         cu_gaussian<<<grid, block>>>(worker_arr, width, height, out);
         cudaDeviceSynchronize();
@@ -609,7 +609,6 @@ void gaussian_diff_edge_kernel(uchar* in, int width, int height, uchar* out, uch
         out = worker_arr;
         worker_arr = tmp;
     }
-    printf("Smoothed array.\n");
 
     if (n_iter % 2 == 1) {
         uchar* tmp = out;
