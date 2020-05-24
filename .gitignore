@@ -2,3 +2,4 @@ comic-upscaler
 *.bmp
 kernels.o
 results
+run_all.sh

@@ -790,26 +790,24 @@ int main(int argc, char** argv) {
 
   copy_to_device(remote_original, original, width * height * channels * sizeof(uchar));
 
-  printf("Creating image of %dx%d\n", new_width, new_height);
-
   struct timeval tv_res, tv_med, tv_lum, tv_blur, tv_sobel, tv_refine, tv_end;
   
   gettimeofday(&tv_res, NULL);
-  // resize(original, width, height, channels, scale, res);
-  resize_kernel(remote_original, width, height, channels, scale, remote_res);
+  resize(original, width, height, channels, scale, res);
+  // resize_kernel(remote_original, width, height, channels, scale, remote_res);
 
   gettimeofday(&tv_med, NULL);
-  // gaussian3(res, new_width, new_height, blurred);
-  gaussian3_kernel(remote_res, new_width, new_height, remote_blurred);
+  gaussian3(res, new_width, new_height, blurred);
+  // gaussian3_kernel(remote_res, new_width, new_height, remote_blurred);
 
   gettimeofday(&tv_lum, NULL);
-  // luminance(blurred, new_width, new_height, channels, lum);
-  luminance_kernel(remote_blurred, new_width, new_height, channels, remote_lum);
+  luminance(blurred, new_width, new_height, channels, lum);
+  // luminance_kernel(remote_blurred, new_width, new_height, channels, remote_lum);
 
   gettimeofday(&tv_blur , NULL);
   for (int i = 0; i < UNBLUR_ITER; i++) {
-    // push_grad(lum, new_width, new_height, tmp1c);
-    push_grad_kernel(remote_lum, new_width, new_height, remote_tmp1c);
+    push_grad(lum, new_width, new_height, tmp1c);
+    // push_grad_kernel(remote_lum, new_width, new_height, remote_tmp1c);
 
     tmp = remote_lum;
     remote_lum = remote_tmp1c;
@@ -818,13 +816,13 @@ int main(int argc, char** argv) {
 
   gettimeofday(&tv_sobel, NULL);
 
-  // sobel(lum, new_width, new_height, grad);
-  sobel_kernel(remote_lum, new_width, new_height, remote_grad);
+  sobel(lum, new_width, new_height, grad);
+  // sobel_kernel(remote_lum, new_width, new_height, remote_grad);
 
   gettimeofday(&tv_refine, NULL);
   for (int i = 0; i < REFINE_ITER; i++) {
-    // push_rgb(res, grad, tmpnc, tmp1c, new_width, new_height, channels);
-    push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels);
+    push_rgb(res, grad, tmpnc, tmp1c, new_width, new_height, channels);
+    // push_rgb_kernel(remote_res, remote_grad, remote_tmpnc, remote_tmp1c, new_width, new_height, channels);
 
     tmp = remote_res;
     remote_res = remote_tmpnc;
@@ -852,13 +850,16 @@ int main(int argc, char** argv) {
   free(sob);
   free(res);
 
-  printf("Total compute time: %.5f (%.2f fps)\n", get_time(tv_res, tv_end), 1/get_time(tv_res, tv_end));
-  printf("  Resizing:   %.5f\n", get_time(tv_res, tv_med));
-  printf("  Blurring:   %.5f\n", get_time(tv_med, tv_lum));
-  printf("  Luminance:  %.5f\n", get_time(tv_lum, tv_blur));
-  printf("  Unblurring: %.5f\n", get_time(tv_blur, tv_sobel));
-  printf("  Sobel:      %.5f\n", get_time(tv_sobel, tv_refine));
-  printf("  Refining:   %.5f\n", get_time(tv_refine, tv_end));
+  float total = get_time(tv_res, tv_end);
+  float fps = 1 / total;
+  float tres = get_time(tv_res, tv_med);
+  float tblur =get_time(tv_med, tv_lum);
+  float tlum = get_time(tv_lum, tv_blur);
+  float tunblur = get_time(tv_blur, tv_sobel);
+  float tsobel = get_time(tv_sobel, tv_refine);
+  float tref = get_time(tv_refine, tv_end);
+  // printf();
+  printf("%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n", total, fps, tres, tblur, tlum, tunblur, tsobel, tref);
 
   return 0;
 }
