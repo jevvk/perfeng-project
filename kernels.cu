@@ -246,16 +246,26 @@ __global__ void cu_gaussian(uchar* in, int width, int height, uchar* out) {
     
     if (x >= width - 2 || y >= height - 2) return;
     
-    float res = 0;
     const int tx = threadIdx.x;
     const int ty = threadIdx.y;
+    
+    // Load all corners then bitshift once
+    int res = shared_in[ty * sWidth + (tx + 0)] + 
+              shared_in[ty * sWidth + (tx + 2)] +
+              shared_in[(ty + 2) * sWidth + (tx + 0)] +
+              shared_in[(ty + 2) * sWidth + (tx + 2)];
+    res >>= 2;
 
-    for (int ky = 0; ky < 3; ky++) {
-        int tty = ty + ky;
-        for (int kx = 0; kx < 3; kx++) {
-            res += g[ky][kx] * shared_in[tty * sWidth + (tx + kx)];
-        }
-    }
+
+    res = res +
+          shared_in[ty * sWidth + (tx + 1)] +
+          shared_in[(ty + 1) * sWidth + (tx + 0)] +
+          shared_in[(ty + 1) * sWidth + (tx + 2)] +
+          shared_in[(ty + 2) * sWidth + (tx + 1)];
+    res >>= 2;
+          
+    res += shared_in[(ty + 1) * sWidth + (tx + 1)];
+    res >>= 4;
 
     out[(y + 1) * width + (x + 1)] = res;
     

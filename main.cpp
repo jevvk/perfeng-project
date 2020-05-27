@@ -186,8 +186,8 @@ int main(int argc, char** argv) {
   gettimeofday(&complete_start, NULL);
 
   int new_width, new_height;
-  int start_idx = 80;
-  int end_idx = 81;
+  int start_idx = 1;
+  int end_idx = 2;
 
   uchar* res;
   uchar* tmp1c;
@@ -195,9 +195,9 @@ int main(int argc, char** argv) {
   for (int image_idx = start_idx; image_idx < end_idx; image_idx++) {
     sprintf(input, "input/images/%03d.bmp", image_idx);
     sprintf(output, "output/images/%03d.bmp", image_idx);
-  
 
-    unsigned int err = loadbmp_decode_file(input, &original, &width, &height, LOADBMP_RGB);
+
+    unsigned int err = loadbmp_decode_file(argv[2], &original, &width, &height, LOADBMP_RGB);
     if (err) {
       printf("Could not open or find the image\n");
       return 1;
@@ -253,8 +253,8 @@ int main(int argc, char** argv) {
   // printf("  Sobel:        %.5f\n", tot_sobel);
   // printf("  Refining:     %.5f\n", tot_refine);
 
-  float fps = 1 / tot_all;
-  printf("%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n", tot_all, fps, tot_res, tot_lum, tot_gaus_diff, tot_blur, tot_sobel, tot_refine);
+  float fps = (end_idx - start_idx) / tot_all;
+  printf("%.5f, %.5f, %.5f, 0.0, %.5f, %.5f, %.5f, %.5f, %.5f\n", tot_all, fps, tot_res, tot_lum, tot_gaus_diff, tot_blur, tot_sobel, tot_refine);
 
   return 0;
 }
