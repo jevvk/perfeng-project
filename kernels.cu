@@ -138,9 +138,10 @@ __device__ uchar cu_blend_lightest(uchar lightest, uchar base, uchar a, uchar b,
   }
   
 
-__device__ void cu_blendc(uchar* in, int channels, uchar* out, int base, int a, int b, int c) {
-    for (int i = 0; i < channels; i++) {
-        out[base * channels + i] = cu_blend(in[base * channels + i], in[a * channels + i], in[b * channels + i], in[c * channels + i]);
+__device__ void cu_blendc(uchar* in, uchar* out, unsigned int base, unsigned int sBase, unsigned int a, unsigned int b, unsigned int c) {
+    #pragma unroll
+    for (int i = 0; i < 3; i++) {
+        out[base * 3 + i] = cu_blend(in[sBase * 3 + i], in[a * 3 + i], in[b * 3 + i], in[c * 3 + i]);
     }
 }
 

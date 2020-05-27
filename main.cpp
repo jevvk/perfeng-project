@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
   float tsobel = get_time(tv_sobel, tv_refine);
   float tref = get_time(tv_refine, tv_end);
   // printf();
-  printf("%.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f\n", total, fps, tres, tlum, tgaus, tunblur, tsobel, tref);
+  printf("%.5f, %.5f, %.5f, 0.0, %.5f, %.5f, %.5f, %.5f, %.5f\n", total, fps, tres, tlum, tgaus, tunblur, tsobel, tref);
 
   return 0;
 }
