@@ -1,0 +1,163 @@
+# after (bitshift-gaussina)
+6.29020, 0.31796, 0.25663, 0.0, 0.16218, 1.42056, 1.45722, 0.46586, 2.52775
+==9494== Profiling application: ./comic-upscaler 2 input/images/001.bmp output/images/001.bmp
+==9494== Profiling result:
+==9494== Metric result:
+Invocations                               Metric Name                           Metric Description         Min         Max         Avg
+Device "GeForce GTX 1060 (0)"
+    Kernel: cu_sobel(unsigned char*, int, int, unsigned char*)
+          2                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      14.08%      14.19%      14.13%
+          2                   stall_memory_dependency           Issue Stall Reasons (Data Request)      52.00%      52.18%      52.09%
+          2                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.79%       0.79%       0.79%
+    Kernel: copy_horizontal(unsigned char*, int, int, int)
+         18                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      12.95%      24.23%      17.88%
+         18                   stall_memory_dependency           Issue Stall Reasons (Data Request)      58.35%      77.45%      68.74%
+         18                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.36%       0.93%       0.59%
+    Kernel: cu_push_grad(unsigned char*, int, int, unsigned char*, unsigned char*)
+          6                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      13.54%      13.61%      13.58%
+          6                   stall_memory_dependency           Issue Stall Reasons (Data Request)      50.92%      51.66%      51.27%
+          6                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       2.31%       2.35%       2.33%
+    Kernel: cu_luminance(unsigned char*, int, int, int, unsigned char*)
+          2                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      53.54%      53.61%      53.57%
+          2                   stall_memory_dependency           Issue Stall Reasons (Data Request)      15.41%      15.46%      15.43%
+          2                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.04%       0.04%       0.04%
+    Kernel: cu_push_rgb(unsigned char*, unsigned char*, unsigned char*, unsigned char*, int, int, unsigned char*)
+         10                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      17.41%      17.68%      17.58%
+         10                   stall_memory_dependency           Issue Stall Reasons (Data Request)      32.93%      33.77%      33.27%
+         10                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       2.56%       2.76%       2.65%
+    Kernel: cu_diff_edge_thresh(unsigned char*, unsigned char*, int, int, int, unsigned char*)
+          2                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      16.51%      16.61%      16.56%
+          2                   stall_memory_dependency           Issue Stall Reasons (Data Request)      69.01%      69.27%      69.14%
+          2                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.24%       0.24%       0.24%
+    Kernel: cu_resize(unsigned char*, int, int, int, float, unsigned char*)
+          2                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      18.16%      18.17%      18.17%
+          2                   stall_memory_dependency           Issue Stall Reasons (Data Request)      36.17%      36.20%      36.18%
+          2                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       1.08%       1.09%       1.09%
+    Kernel: copy_vertical(unsigned char*, int, int, int)
+         18                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      11.69%      14.75%      13.21%
+         18                   stall_memory_dependency           Issue Stall Reasons (Data Request)      69.77%      75.07%      72.86%
+         18                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.50%       0.66%       0.58%
+    Kernel: cu_gaussian(unsigned char*, int, int, unsigned char*)
+          6                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      18.32%      18.39%      18.35%
+          6                   stall_memory_dependency           Issue Stall Reasons (Data Request)      23.71%      24.01%      23.87%
+          6                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       3.33%       3.35%       3.34%
+    Kernel: copy_all(unsigned char*, int, int, unsigned char*)
+          2                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      16.51%      16.54%      16.52%
+          2                   stall_memory_dependency           Issue Stall Reasons (Data Request)      68.08%      68.50%      68.29%
+          2                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.22%       0.22%       0.22%
+    Kernel: cu_dilate(unsigned char*, int, int, unsigned char*)
+          8                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      23.67%      23.95%      23.80%
+          8                   stall_memory_dependency           Issue Stall Reasons (Data Request)      55.49%      55.93%      55.72%
+          8                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.62%       0.63%       0.63%
+
+# after (throughput)
+3.46956, 0.28822, 0.17362, 0.10040, 0.78404, 0.75296, 0.24732, 1.41121
+==11169== Profiling application: ./comic-upscaler 2 input/images/001.bmp output/images/001.bmp
+==11169== Profiling result:
+==11169== Metric result:
+Invocations                               Metric Name                           Metric Description         Min         Max         Avg
+Device "GeForce GTX 1060 (0)"
+    Kernel: cu_sobel(unsigned char*, int, int, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      14.84%      14.84%      14.84%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      51.03%      51.03%      51.03%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.80%       0.80%       0.80%
+    Kernel: copy_horizontal(unsigned char*, int, int, int)
+          9                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      13.16%      23.86%      17.89%
+          9                   stall_memory_dependency           Issue Stall Reasons (Data Request)      58.96%      76.66%      68.33%
+          9                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.46%       0.75%       0.59%
+    Kernel: cu_push_grad(unsigned char*, int, int, unsigned char*, unsigned char*)
+          3                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      15.26%      15.45%      15.35%
+          3                   stall_memory_dependency           Issue Stall Reasons (Data Request)      48.98%      49.90%      49.50%
+          3                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       2.17%       2.21%       2.19%
+    Kernel: cu_luminance(unsigned char*, int, int, int, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      53.57%      53.57%      53.57%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      15.36%      15.36%      15.36%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.04%       0.04%       0.04%
+    Kernel: cu_push_rgb(unsigned char*, unsigned char*, unsigned char*, unsigned char*, int, int, unsigned char*)
+          5                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      16.72%      16.80%      16.76%
+          5                   stall_memory_dependency           Issue Stall Reasons (Data Request)      30.29%      30.44%      30.36%
+          5                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       2.42%       2.44%       2.43%
+    Kernel: cu_diff_edge_thresh(unsigned char*, unsigned char*, int, int, int, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      16.54%      16.54%      16.54%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      69.09%      69.09%      69.09%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.24%       0.24%       0.24%
+    Kernel: cu_resize(unsigned char*, int, int, int, float, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      18.15%      18.15%      18.15%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      36.16%      36.16%      36.16%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       1.08%       1.08%       1.08%
+    Kernel: copy_vertical(unsigned char*, int, int, int)
+          9                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      12.18%      14.94%      13.32%
+          9                   stall_memory_dependency           Issue Stall Reasons (Data Request)      69.77%      75.07%      72.72%
+          9                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.49%       0.63%       0.57%
+    Kernel: cu_gaussian(unsigned char*, int, int, unsigned char*)
+          3                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      19.49%      19.56%      19.53%
+          3                   stall_memory_dependency           Issue Stall Reasons (Data Request)      21.84%      21.90%      21.87%
+          3                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       2.49%       2.50%       2.50%
+    Kernel: copy_all(unsigned char*, int, int, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      16.55%      16.55%      16.55%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      68.71%      68.71%      68.71%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.21%       0.21%       0.21%
+    Kernel: cu_dilate(unsigned char*, int, int, unsigned char*)
+          4                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      13.92%      14.20%      14.06%
+          4                   stall_memory_dependency           Issue Stall Reasons (Data Request)      74.93%      75.40%      75.17%
+          4                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.34%       0.34%       0.34%
+
+# before (master)
+12329434/8294400 pixels (-48.65 percent skipped)
+Total compute time: 3.31264
+  Resizing:   0.16935
+  Blurring:   0.00000
+  Luminance:  0.08138
+  Gauss + Edge:  0.64210
+  Unblurring: 0.76509
+  Sobel:      0.22861
+  Refining:   1.42610
+==10482== Profiling application: ./comic-upscaler 2 input/images/001.bmp output/images/001.bmp
+==10482== Profiling result:
+==10482== Metric result:
+Invocations                               Metric Name                           Metric Description         Min         Max         Avg
+Device "GeForce GTX 1060 (0)"
+    Kernel: cu_sobel(unsigned char*, int, int, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      26.04%      26.04%      26.04%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      35.16%      35.16%      35.16%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.52%       0.52%       0.52%
+    Kernel: copy_horizontal(unsigned char*, int, int, int)
+          9                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      13.61%      23.70%      18.09%
+          9                   stall_memory_dependency           Issue Stall Reasons (Data Request)      59.64%      74.30%      67.81%
+          9                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.50%       0.85%       0.58%
+    Kernel: cu_push_grad(unsigned char*, int, int, unsigned char*, unsigned char*)
+          3                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      51.30%      51.56%      51.44%
+          3                   stall_memory_dependency           Issue Stall Reasons (Data Request)      35.11%      35.35%      35.21%
+          3                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.36%       0.36%       0.36%
+    Kernel: cu_luminance(unsigned char*, int, int, int, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      53.57%      53.57%      53.57%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      15.35%      15.35%      15.35%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.04%       0.04%       0.04%
+    Kernel: cu_push_rgb(unsigned char*, unsigned char*, unsigned char*, unsigned char*, int, int, int, unsigned char*)
+          5                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      56.11%      56.95%      56.55%
+          5                   stall_memory_dependency           Issue Stall Reasons (Data Request)      35.85%      36.73%      36.25%
+          5                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.29%       0.29%       0.29%
+    Kernel: cu_diff_edge_thresh(unsigned char*, unsigned char*, int, int, int, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      16.54%      16.54%      16.54%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      69.35%      69.35%      69.35%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.24%       0.24%       0.24%
+    Kernel: cu_resize(unsigned char*, int, int, int, float, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      18.86%      18.86%      18.86%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      50.53%      50.53%      50.53%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.78%       0.78%       0.78%
+    Kernel: copy_vertical(unsigned char*, int, int, int)
+          9                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      12.26%      14.74%      13.37%
+          9                   stall_memory_dependency           Issue Stall Reasons (Data Request)      68.93%      76.06%      72.73%
+          9                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.61%       0.72%       0.68%
+    Kernel: cu_gaussian(unsigned char*, int, int, unsigned char*)
+          3                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      13.21%      13.30%      13.24%
+          3                   stall_memory_dependency           Issue Stall Reasons (Data Request)      54.78%      54.80%      54.79%
+          3                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.35%       0.35%       0.35%
+    Kernel: copy_all(unsigned char*, int, int, unsigned char*)
+          1                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      16.42%      16.42%      16.42%
+          1                   stall_memory_dependency           Issue Stall Reasons (Data Request)      68.51%      68.51%      68.51%
+          1                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.21%       0.21%       0.21%
+    Kernel: cu_dilate(unsigned char*, int, int, unsigned char*)
+          3                     stall_exec_dependency   Issue Stall Reasons (Execution Dependency)      13.91%      14.11%      14.01%
+          3                   stall_memory_dependency           Issue Stall Reasons (Data Request)      75.15%      75.50%      75.29%
+          3                           stall_pipe_busy              Issue Stall Reasons (Pipe Busy)       0.34%       0.35%       0.34%

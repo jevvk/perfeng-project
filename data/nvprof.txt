@@ -1,0 +1,109 @@
+# tot_all, fps, tot_res, tot_lum, tot_gaus_diff, tot_blur, tot_sobel, tot_refine
+0.00806, 124.03870, 0.00074, 0.0, 0.00055, 0.00256, 0.00063, 0.00037, 0.00322
+
+# 1
+Invocations                               Metric Name                          Metric Description         Min         Max         Avg
+Device "GeForce GTX 1070 (0)"
+Kernel: cu_sobel(unsigned char*, int, int, unsigned char*)
+        1                              inst_integer                        Integer Instructions   456614740   456614740   456614740
+        1                           dram_read_bytes      Total bytes read from DRAM to L2 cache     8296512     8296512     8296512
+        1                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8381888     8381888     8381888
+Kernel: copy_horizontal(unsigned char*, int, int, int)
+        9                              inst_integer                        Integer Instructions      211041      245574      230226
+        9                           dram_read_bytes      Total bytes read from DRAM to L2 cache       10048       25472       18609
+        9                          dram_write_bytes   Total bytes written from L2 cache to DRAM           0       63648       26040
+Kernel: cu_push_grad(unsigned char*, int, int, unsigned char*, unsigned char*)
+        3                              inst_integer                        Integer Instructions   200094468   200094468   200094468
+        3                           dram_read_bytes      Total bytes read from DRAM to L2 cache    16576896    16577056    16576949
+        3                          dram_write_bytes   Total bytes written from L2 cache to DRAM     7611744     8640320     7959125
+Kernel: cu_luminance(unsigned char*, int, int, int, unsigned char*)
+        1                              inst_integer                        Integer Instructions   183439360   183439360   183439360
+        1                           dram_read_bytes      Total bytes read from DRAM to L2 cache    24885024    24885024    24885024
+        1                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8745664     8745664     8745664
+Kernel: cu_push_rgb(unsigned char*, unsigned char*, unsigned char*, unsigned char*, int, int, unsigned char*)
+        5                              inst_integer                        Integer Instructions   739456700   739456700   739456700
+        5                           dram_read_bytes      Total bytes read from DRAM to L2 cache    41468192    41468704    41468460
+        5                          dram_write_bytes   Total bytes written from L2 cache to DRAM    32254432    33258144    32856403
+Kernel: cu_diff_edge_thresh(unsigned char*, unsigned char*, int, int, int, unsigned char*)
+        1                              inst_integer                        Integer Instructions   183246848   183246848   183246848
+        1                           dram_read_bytes      Total bytes read from DRAM to L2 cache    16590112    16590112    16590112
+        1                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8625376     8625376     8625376
+Kernel: cu_resize(unsigned char*, int, int, int, float, unsigned char*)
+        1                              inst_integer                        Integer Instructions  1344153656  1344153656  1344153656
+        1                           dram_read_bytes      Total bytes read from DRAM to L2 cache     6226720     6226720     6226720
+        1                          dram_write_bytes   Total bytes written from L2 cache to DRAM    24974240    24974240    24974240
+Kernel: copy_vertical(unsigned char*, int, int, int)
+        9                              inst_integer                        Integer Instructions      118800      138240      129600
+        9                           dram_read_bytes      Total bytes read from DRAM to L2 cache      140608      140672      140615
+        9                          dram_write_bytes   Total bytes written from L2 cache to DRAM        3296      639264      506833
+Kernel: cu_gaussian(unsigned char*, int, int, unsigned char*)
+        3                              inst_integer                        Integer Instructions   539439984   539439984   539439984
+        3                           dram_read_bytes      Total bytes read from DRAM to L2 cache     8296576     8298368     8297237
+        3                          dram_write_bytes   Total bytes written from L2 cache to DRAM     7371104     8356096     7699434
+Kernel: copy_all(unsigned char*, int, int, unsigned char*)
+        1                              inst_integer                        Integer Instructions   133480448   133480448   133480448
+        1                           dram_read_bytes      Total bytes read from DRAM to L2 cache     8295488     8295488     8295488
+        1                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8378048     8378048     8378048
+Kernel: cu_dilate(unsigned char*, int, int, unsigned char*)
+        4                              inst_integer                        Integer Instructions   364187397   364191166   364189416
+        4                           dram_read_bytes      Total bytes read from DRAM to L2 cache     8264544     8265536     8265288
+        4                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8317248     8367424     8343696
+
+# 2
+Invocations                               Metric Name                          Metric Description         Min         Max         Avg
+Device "GeForce GTX 1070 (0)"
+    Kernel: cu_sobel(unsigned char*, int, int, unsigned char*)
+          1                              inst_integer                        Integer Instructions   456614740   456614740   456614740
+          1                                inst_fp_32                     FP Instructions(Single)     8282404     8282404     8282404
+          1                           dram_read_bytes      Total bytes read from DRAM to L2 cache     8296768     8296768     8296768
+          1                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8360256     8360256     8360256
+    Kernel: copy_horizontal(unsigned char*, int, int, int)
+          9                              inst_integer                        Integer Instructions      211041      245574      230226
+          9                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          9                           dram_read_bytes      Total bytes read from DRAM to L2 cache       10048       25472       18624
+          9                          dram_write_bytes   Total bytes written from L2 cache to DRAM           0       62080       13870
+    Kernel: cu_push_grad(unsigned char*, int, int, unsigned char*, unsigned char*)
+          3                              inst_integer                        Integer Instructions   200094468   200094468   200094468
+          3                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          3                           dram_read_bytes      Total bytes read from DRAM to L2 cache    16576800    16576896    16576832
+          3                          dram_write_bytes   Total bytes written from L2 cache to DRAM     7624032     8624448     8290805
+    Kernel: cu_luminance(unsigned char*, int, int, int, unsigned char*)
+          1                              inst_integer                        Integer Instructions   183439360   183439360   183439360
+          1                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          1                           dram_read_bytes      Total bytes read from DRAM to L2 cache    24885024    24885024    24885024
+          1                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8766528     8766528     8766528
+    Kernel: cu_push_rgb(unsigned char*, unsigned char*, unsigned char*, unsigned char*, int, int, unsigned char*)
+          5                              inst_integer                        Integer Instructions   739456700   739456700   739456700
+          5                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          5                           dram_read_bytes      Total bytes read from DRAM to L2 cache    41468288    41468832    41468697
+          5                          dram_write_bytes   Total bytes written from L2 cache to DRAM    32256608    33265504    32857664
+    Kernel: cu_diff_edge_thresh(unsigned char*, unsigned char*, int, int, int, unsigned char*)
+          1                              inst_integer                        Integer Instructions   183246848   183246848   183246848
+          1                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          1                           dram_read_bytes      Total bytes read from DRAM to L2 cache    16590112    16590112    16590112
+          1                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8615776     8615776     8615776
+    Kernel: cu_resize(unsigned char*, int, int, int, float, unsigned char*)
+          1                              inst_integer                        Integer Instructions  1344153656  1344153656  1344153656
+          1                                inst_fp_32                     FP Instructions(Single)   398201804   398201804   398201804
+          1                           dram_read_bytes      Total bytes read from DRAM to L2 cache     6226464     6226464     6226464
+          1                          dram_write_bytes   Total bytes written from L2 cache to DRAM    24797408    24797408    24797408
+    Kernel: copy_vertical(unsigned char*, int, int, int)
+          9                              inst_integer                        Integer Instructions      118800      138240      129600
+          9                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          9                           dram_read_bytes      Total bytes read from DRAM to L2 cache      140608      140672      140650
+          9                          dram_write_bytes   Total bytes written from L2 cache to DRAM          96      619552      185774
+    Kernel: cu_gaussian(unsigned char*, int, int, unsigned char*)
+          3                              inst_integer                        Integer Instructions   539439984   539439984   539439984
+          3                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          3                           dram_read_bytes      Total bytes read from DRAM to L2 cache     8294720     8308288     8299840
+          3                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8362816     8374976     8369173
+    Kernel: copy_all(unsigned char*, int, int, unsigned char*)
+          1                              inst_integer                        Integer Instructions   133480448   133480448   133480448
+          1                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          1                           dram_read_bytes      Total bytes read from DRAM to L2 cache     8295744     8295744     8295744
+          1                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8389824     8389824     8389824
+    Kernel: cu_dilate(unsigned char*, int, int, unsigned char*)
+          4                              inst_integer                        Integer Instructions   364187397   364191166   364189416
+          4                                inst_fp_32                     FP Instructions(Single)           0           0           0
+          4                           dram_read_bytes      Total bytes read from DRAM to L2 cache     8264000     8265536     8265088
+          4                          dram_write_bytes   Total bytes written from L2 cache to DRAM     8315232     8345152     8331048
