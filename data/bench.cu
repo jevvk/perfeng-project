@@ -391,8 +391,10 @@ int main() {
     uchar* remote_rgb;
     uchar* remote_bitmask;
     uchar* remote_x;
+    uchar* remote_y;
 
     create_device_image((void**) &remote_x,  new_width * new_height * 3 * sizeof(uchar));
+    create_device_image((void**) &remote_y,  new_width * new_height * 3 * sizeof(uchar));
     create_device_image((void**) &remote_grad,  new_width * new_height * 3 * sizeof(uchar));
     create_device_image((void**) &remote_rgb, new_width * new_height * sizeof(uchar));
     create_device_image((void**) &remote_bitmask, new_width * new_height * sizeof(uchar));
@@ -407,7 +409,7 @@ int main() {
     }
     gettimeofday(&tv_rgb, NULL);
     for (int i = 0; i < ITERS; i++) {
-        push_grad_kernel(remote_grad, new_width, new_height, remote_x, remote_bitmask);
+        push_rgb_kernel(remote_rgb, remote_grad, remote_x, remote_y, new_width, new_height, 3W, remote_bitmask);
     }
     gettimeofday(&tv_end, NULL);
 
