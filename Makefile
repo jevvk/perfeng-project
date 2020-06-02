@@ -19,4 +19,4 @@ comic-upscaler: main.cpp $(OBJ_CUDA)
 	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:
-	rm comic-upscaler
+	rm comic-upscaler kernels.o

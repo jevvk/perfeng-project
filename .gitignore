@@ -1,5 +1,5 @@
 comic-upscaler
-*.bmp
+input/das_images/*
 kernels.o
 results
-run_all.sh
+*.bmp
